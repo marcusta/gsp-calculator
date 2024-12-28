@@ -63,10 +63,7 @@ export function BallPhysicsCalculator() {
       setIsLoading(true);
       try {
         // Fetch raw carry
-        const rawResponse = await fetch(
-          `/trajectory?ballSpeed=${speed}&spin=${spin}&vla=${vla}`
-        );
-        const rawData = await rawResponse.json();
+        const rawData = await getCarryDataFromServer(speed, spin, vla);
         setRawCarry(rawData.Carry);
 
         // Fetch modified carry
