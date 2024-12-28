@@ -25,6 +25,11 @@ import {
 import { getCarryDataFromServer, type CarryData } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import { DistanceUnit, convertMetersToYards } from "@/types/units";
+import { Input } from "@/components/ui/input";
+import {
+  getModifiedLieVla,
+  calculateOfflineDeviation,
+} from "@/lie-calculation";
 
 interface CarryResult {
   ballSpeed: number;
@@ -32,6 +37,7 @@ interface CarryResult {
   vla: number;
   rawCarry: number;
   estimatedCarry: number;
+  offlineDeviation: number;
   modifiers: {
     speedPenalty: number;
     spinPenalty: number;
@@ -46,6 +52,8 @@ export function ShotSuggester() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unit, setUnit] = useState<DistanceUnit>("meters");
+  const [upDownLie, setUpDownLie] = useState<string>("0");
+  const [rightLeftLie, setRightLeftLie] = useState<string>("0");
 
   // Filter PhyMatList to only include materials that have entries in the penalty tables
   const validMaterialIndices = [1, 3, 4, 6, 11, 12, 13, 16, 17];
@@ -92,23 +100,40 @@ export function ShotSuggester() {
 
           const adjustedSpeed = speed * speedPenalty;
           const adjustedSpin = avgSpin * spinPenalty;
-          const adjustedVLA = avgVLA * vlaPenalty;
 
-          // Get raw carry
+          // Apply lie angle modifications to VLA
+          const baseVLA = avgVLA * vlaPenalty;
+          const modifiedVLA = getModifiedLieVla(
+            baseVLA,
+            validateLieInput(upDownLie)
+          );
+
+          // Get raw carry (without lie angle)
           const rawCarry = await calculateCarry(speed, avgSpin, avgVLA);
-          // Get estimated carry with penalties
+          // Get estimated carry with penalties and lie angle
           const estimatedCarry = await calculateCarry(
             adjustedSpeed,
             adjustedSpin,
-            adjustedVLA
+            modifiedVLA
           );
+
+          // Calculate offline deviation if there's a right/left lie angle
+          const offlineDeviation =
+            validateLieInput(rightLeftLie) !== 0
+              ? calculateOfflineDeviation(
+                  modifiedVLA,
+                  validateLieInput(rightLeftLie),
+                  estimatedCarry.Carry
+                )
+              : 0;
 
           return {
             ballSpeed: speed,
             spin: avgSpin,
-            vla: avgVLA,
+            vla: modifiedVLA,
             rawCarry: rawCarry.Carry,
             estimatedCarry: estimatedCarry.Carry,
+            offlineDeviation,
             modifiers: {
               speedPenalty,
               spinPenalty,
@@ -129,6 +154,11 @@ export function ShotSuggester() {
   const calculatePenaltyPercentage = (raw: number, withPenalty: number) => {
     const reduction = ((raw - withPenalty) / raw) * 100;
     return reduction.toFixed(1);
+  };
+
+  const validateLieInput = (value: string): number => {
+    const num = parseFloat(value);
+    return isNaN(num) ? 0 : num;
   };
 
   return (
@@ -184,6 +214,57 @@ export function ShotSuggester() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="updown-lie">
+              Up/Down Slope (degrees)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Positive value = uphill lie
+                    <br />
+                    Negative value = downhill lie
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="updown-lie"
+              type="number"
+              value={upDownLie}
+              onChange={(e) => setUpDownLie(e.target.value)}
+              className="bg-background"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rightleft-lie">
+              Right/Left Slope (degrees)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Positive value = right slope
+                    <br />
+                    Negative value = left slope
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="rightleft-lie"
+              type="number"
+              value={rightLeftLie}
+              onChange={(e) => setRightLeftLie(e.target.value)}
+              className="bg-background"
+            />
           </div>
         </div>
 
@@ -268,6 +349,18 @@ export function ShotSuggester() {
                     )}
                     %
                   </p>
+                  {result.offlineDeviation !== 0 && (
+                    <p className="text-yellow-500">
+                      Ball will travel{" "}
+                      {unit === "yards"
+                        ? convertMetersToYards(
+                            Math.abs(result.offlineDeviation)
+                          ).toFixed(1)
+                        : Math.abs(result.offlineDeviation).toFixed(1)}
+                      {unit} {result.offlineDeviation > 0 ? "right" : "left"} of
+                      target
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
