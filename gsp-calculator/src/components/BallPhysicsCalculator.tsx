@@ -17,6 +17,17 @@ import {
 import { getCarryDataFromServer } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import { DistanceUnit, convertMetersToYards } from "@/types/units";
+import {
+  getModifiedLieVla,
+  calculateOfflineDeviation,
+} from "@/lie-calculation";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
 
 export function BallPhysicsCalculator() {
   const [speed, setSpeed] = useState<number>(0);
@@ -27,6 +38,9 @@ export function BallPhysicsCalculator() {
   const [modifiedCarry, setModifiedCarry] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [unit, setUnit] = useState<DistanceUnit>("meters");
+  const [upDownLie, setUpDownLie] = useState<string>("0");
+  const [rightLeftLie, setRightLeftLie] = useState<string>("0");
+  const [offlineDeviation, setOfflineDeviation] = useState<number | null>(null);
 
   // Calculate modifiers with error handling
   const calculatePenalties = () => {
@@ -48,10 +62,18 @@ export function BallPhysicsCalculator() {
 
   const { speedPenalty, spinPenalty, vlaPenalty } = calculatePenalties();
 
+  const validateLieInput = (value: string): number => {
+    const num = parseFloat(value);
+    return isNaN(num) ? 0 : num;
+  };
+
   // Calculate modified values
   const modifiedSpeed = speed * speedPenalty;
   const modifiedSpin = spin * spinPenalty;
-  const modifiedVLA = vla * vlaPenalty;
+  const modifiedVLA = getModifiedLieVla(
+    vla * vlaPenalty,
+    validateLieInput(upDownLie)
+  );
 
   // Filter PhyMatList to only include materials that have entries in the penalty tables
   const validMaterialIndices = [1, 3, 4, 6, 11, 12, 13, 16, 17];
@@ -76,10 +98,23 @@ export function BallPhysicsCalculator() {
           modifiedVLA
         );
         setModifiedCarry(modData.Carry);
+
+        // Calculate offline deviation if there's a right/left lie angle
+        if (validateLieInput(rightLeftLie) !== 0) {
+          const deviation = calculateOfflineDeviation(
+            modifiedVLA,
+            validateLieInput(rightLeftLie),
+            modData.Carry
+          );
+          setOfflineDeviation(deviation);
+        } else {
+          setOfflineDeviation(null);
+        }
       } catch (error) {
         console.error("Error fetching carry distances:", error);
         setRawCarry(null);
         setModifiedCarry(null);
+        setOfflineDeviation(null);
       } finally {
         setIsLoading(false);
       }
@@ -91,7 +126,7 @@ export function BallPhysicsCalculator() {
       <h2 className="text-2xl font-bold mb-6">Ball Physics Calculator</h2>
 
       <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 max-w-xl">
           <div className="space-y-2">
             <Label htmlFor="speed">Ball Speed</Label>
             <Input
@@ -101,11 +136,12 @@ export function BallPhysicsCalculator() {
               max="150"
               value={speed}
               onChange={(e) => setSpeed(Number(e.target.value))}
+              className="w-40"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="vla">Vertical Launch Angle</Label>
+            <Label htmlFor="vla">VLA</Label>
             <Input
               id="vla"
               type="number"
@@ -113,6 +149,7 @@ export function BallPhysicsCalculator() {
               max="45"
               value={vla}
               onChange={(e) => setVLA(Number(e.target.value))}
+              className="w-40"
             />
           </div>
 
@@ -124,6 +161,7 @@ export function BallPhysicsCalculator() {
               min="0"
               value={spin}
               onChange={(e) => setSpin(Number(e.target.value))}
+              className="w-40"
             />
           </div>
 
@@ -133,7 +171,7 @@ export function BallPhysicsCalculator() {
               value={materialIndex.toString()}
               onValueChange={(value) => setMaterialIndex(Number(value))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Select material" />
               </SelectTrigger>
               <SelectContent>
@@ -144,6 +182,57 @@ export function BallPhysicsCalculator() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 max-w-md">
+          <div className="space-y-2">
+            <Label htmlFor="updown-lie">
+              Up/Down Slope (degrees)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Positive value = uphill lie
+                    <br />
+                    Negative value = downhill lie
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="updown-lie"
+              type="number"
+              value={upDownLie}
+              onChange={(e) => setUpDownLie(e.target.value)}
+              className="w-24"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rightleft-lie">
+              Right/Left Slope (degrees)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Positive value = right slope
+                    <br />
+                    Negative value = left slope
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="rightleft-lie"
+              type="number"
+              value={rightLeftLie}
+              onChange={(e) => setRightLeftLie(e.target.value)}
+              className="w-24"
+            />
           </div>
         </div>
 
@@ -225,6 +314,19 @@ export function BallPhysicsCalculator() {
                   : "Not calculated"}
               </p>
             </div>
+            {offlineDeviation !== null && (
+              <div className="col-span-2">
+                <p className="font-medium text-yellow-500">
+                  Ball will travel{" "}
+                  {unit === "yards"
+                    ? convertMetersToYards(Math.abs(offlineDeviation)).toFixed(
+                        1
+                      )
+                    : Math.abs(offlineDeviation).toFixed(1)}{" "}
+                  {unit} {offlineDeviation > 0 ? "right" : "left"} of target
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
