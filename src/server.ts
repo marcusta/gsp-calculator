@@ -1,3 +1,4 @@
+import { readFile } from "fs/promises";
 import { Hono } from "hono";
 import { TrajectoryService } from "./services/database.service";
 import { SuggestShotService } from "./services/suggest-shot.service";
@@ -100,6 +101,63 @@ app.post("/suggestShot", async (c) => {
 
 // Add a simple health check endpoint
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+// Serve static assets
+app.get("/assets/*", async (c) => {
+  try {
+    const path = c.req.path.replace("/assets/", "");
+    const filePath = `./public/frontend/${path}`;
+    const file = await readFile(filePath);
+
+    // Set appropriate content-type based on file extension
+    const ext = path.split(".").pop()?.toLowerCase();
+    if (ext === "css") c.header("Content-Type", "text/css");
+    else if (ext === "js") c.header("Content-Type", "application/javascript");
+    else if (ext === "png") c.header("Content-Type", "image/png");
+    else if (ext === "jpg" || ext === "jpeg")
+      c.header("Content-Type", "image/jpeg");
+    else if (ext === "svg") c.header("Content-Type", "image/svg+xml");
+
+    return c.body(file.toString());
+  } catch (error) {
+    console.error("Asset not found:", error);
+    return c.json({ error: "Asset not found" }, 404);
+  }
+});
+
+app.get("/gsp-calc/assets/*", async (c) => {
+  try {
+    const path = c.req.path.replace("/gsp-calc/assets/", "");
+    const filePath = `./public/frontend/assets/${path}`;
+    const file = await readFile(filePath);
+
+    // Set appropriate content-type based on file extension
+    const ext = path.split(".").pop()?.toLowerCase();
+    if (ext === "css") c.header("Content-Type", "text/css");
+    else if (ext === "js") c.header("Content-Type", "application/javascript");
+    else if (ext === "png") c.header("Content-Type", "image/png");
+    else if (ext === "jpg" || ext === "jpeg")
+      c.header("Content-Type", "image/jpeg");
+    else if (ext === "svg") c.header("Content-Type", "image/svg+xml");
+
+    return c.body(file.toString());
+  } catch (error) {
+    console.error("Asset not found:", error);
+    return c.json({ error: "Asset not found" }, 404);
+  }
+});
+
+// Catch-all route to serve index.html
+app.all("*", async (c) => {
+  try {
+    const html = await readFile("./public/frontend/index.html");
+    c.header("Content-Type", "text/html");
+    return c.body(html.toString());
+  } catch (error) {
+    console.error("Could not load index.html:", error);
+    return c.json({ error: "Could not load index.html" }, 500);
+  }
+});
 
 // Handle graceful shutdown
 process.on("SIGTERM", () => {

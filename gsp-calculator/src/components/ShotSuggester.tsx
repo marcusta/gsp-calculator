@@ -16,6 +16,13 @@ import {
   getRoughVLAPenalty,
 } from "@/penalty";
 import { getCarryFromServer } from "@/api";
+import { Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface CarryResult {
   ballSpeed: number;
@@ -23,6 +30,11 @@ interface CarryResult {
   vla: number;
   rawCarry: number;
   estimatedCarry: number;
+  modifiers: {
+    speedPenalty: number;
+    spinPenalty: number;
+    vlaPenalty: number;
+  };
 }
 
 export function ShotSuggester() {
@@ -93,6 +105,11 @@ export function ShotSuggester() {
             vla: avgVLA,
             rawCarry,
             estimatedCarry,
+            modifiers: {
+              speedPenalty,
+              spinPenalty,
+              vlaPenalty,
+            },
           };
         })
       );
@@ -169,10 +186,45 @@ export function ShotSuggester() {
 
             {results.map((result, index) => (
               <div key={index} className="border p-4 rounded-lg">
-                <h4 className="font-semibold mb-2">
-                  {index === 0 ? "Minimum" : index === 1 ? "Middle" : "Maximum"}{" "}
-                  Power
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold mb-2">
+                    {index === 0
+                      ? "Minimum"
+                      : index === 1
+                      ? "Middle"
+                      : "Maximum"}{" "}
+                    Power
+                  </h4>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-4 w-4 text-muted-foreground -translate-y-1" />
+                      </TooltipTrigger>
+                      <TooltipContent className="space-y-2 bg-blue-800">
+                        <p className="font-semibold">Applied Modifiers:</p>
+                        <p>
+                          Speed:{" "}
+                          {((1 - result.modifiers.speedPenalty) * 100).toFixed(
+                            1
+                          )}
+                          % reduction
+                        </p>
+                        <p>
+                          Spin:{" "}
+                          {((result.modifiers.spinPenalty - 1) * 100).toFixed(
+                            1
+                          )}
+                          % increase
+                        </p>
+                        <p>
+                          Launch Angle:{" "}
+                          {((result.modifiers.vlaPenalty - 1) * 100).toFixed(1)}
+                          % change
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <p>Ball Speed: {result.ballSpeed.toFixed(1)} mph</p>
                 <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
                 <p>Launch Angle: {result.vla.toFixed(1)}°</p>

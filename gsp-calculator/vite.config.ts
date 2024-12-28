@@ -9,14 +9,15 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  base: process.env.NODE_ENV === "production" ? "/gsp-calc/" : "/",
   server: {
     proxy: {
       "/trajectory": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3004",
         changeOrigin: true,
       },
       "/suggestShot": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3004",
         changeOrigin: true,
       },
     },

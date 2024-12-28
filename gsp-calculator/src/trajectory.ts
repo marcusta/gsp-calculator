@@ -1,8 +1,3 @@
-import { getCarryFromServer } from "./api";
-import { getRoughSpeedPenalty, getRoughVLAPenalty } from "./penalty";
-
-import { getRoughSpinPenalty } from "./penalty";
-
 interface ClubRanges {
   spinMin: number;
   spinMax: number;
@@ -185,19 +180,6 @@ interface ShotParameters {
   rawCarry: number;
 }
 
-async function getCarry(
-  ballSpeed: number,
-  spin: number,
-  vla: number
-): Promise<number> {
-  try {
-    return await getCarryFromServer(ballSpeed, spin, vla);
-  } catch (error) {
-    console.error("Error fetching trajectory:", error);
-    throw error;
-  }
-}
-
 export async function suggestShot(
   targetCarry: number,
   materialIndex: number
@@ -259,86 +241,4 @@ export async function suggestShot(
   };
 
   return shotParams;
-}
-
-async function adjustResult(
-  bestParams: ShotParameters,
-  targetCarry: number,
-  materialIndex: number
-) {
-  const diff = bestParams.estimatedCarry - targetCarry;
-  const absDiff = Math.abs(diff);
-
-  if (absDiff > 5) {
-    // We only apply the tweak if off by ~10 meters or more.
-    let speedAdjustment = 0;
-    let spinAdjustment = 0;
-    let vlaAdjustment = 0;
-
-    // Decide if we overshot or undershot
-    if (diff > 0) {
-      // Overshot
-      speedAdjustment = -4; // reduce ball speed by ~4 mph
-      spinAdjustment = 500; // add 500 rpm
-      vlaAdjustment = 2; // raise launch angle by 2
-    } else {
-      // Undershot
-      speedAdjustment = 4; // increase ball speed by ~4 mph
-      spinAdjustment = -500; // reduce spin by 500 rpm
-      vlaAdjustment = -2; // reduce launch angle by 2
-    }
-
-    // Apply the heuristic
-    const newBallSpeed = bestParams.ballSpeed + speedAdjustment;
-    const newSpin = bestParams.spin + spinAdjustment;
-    const newVLA = bestParams.vla + vlaAdjustment;
-
-    // Now we must apply penalties again to see the *actual* flight
-    const speedPenalty = getRoughSpeedPenalty(
-      materialIndex,
-      newBallSpeed,
-      newVLA
-    );
-    const spinPenalty = getRoughSpinPenalty(
-      materialIndex,
-      newBallSpeed,
-      newVLA
-    );
-    const vlaPenalty = getRoughVLAPenalty(materialIndex, newBallSpeed, newVLA);
-
-    const modSpeed = newBallSpeed * speedPenalty;
-    const modSpin = newSpin * spinPenalty;
-    const modVLA = newVLA * vlaPenalty;
-
-    // Re-fetch carry from the server with the new penalized numbers
-    try {
-      const newEstimatedCarry = await getCarry(modSpeed, modSpin, modVLA);
-
-      // If it's better, use it
-      const newDiff = Math.abs(newEstimatedCarry - targetCarry);
-      if (newDiff < absDiff) {
-        // It's an improvement, so adopt the new parameters
-        bestParams = {
-          ballSpeed: newBallSpeed,
-          spin: newSpin,
-          vla: newVLA,
-          estimatedCarry: newEstimatedCarry,
-          rawCarry: 0, // We'll re-fetch rawCarry if you want
-        };
-
-        // Optionally fetch rawCarry again
-        try {
-          const newRaw = await getCarry(newBallSpeed, newSpin, newVLA);
-          bestParams.rawCarry = newRaw;
-        } catch {
-          // ignore
-        }
-      }
-    } catch (err) {
-      console.error("Adjustment fetch error", err);
-    }
-  }
-
-  // Return bestParams
-  return bestParams;
 }
