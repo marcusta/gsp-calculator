@@ -14,9 +14,9 @@ import {
   getRoughSpinPenalty,
   getRoughVLAPenalty,
 } from "@/penalty";
+import { getCarryDataFromServer } from "@/api";
 
 export function BallPhysicsCalculator() {
-  // Initialize with TVGrough (index 1) as default
   const [speed, setSpeed] = useState<number>(0);
   const [vla, setVLA] = useState<number>(0);
   const [spin, setSpin] = useState<number>(0);
@@ -70,10 +70,11 @@ export function BallPhysicsCalculator() {
         setRawCarry(rawData.Carry);
 
         // Fetch modified carry
-        const modResponse = await fetch(
-          `/trajectory?ballSpeed=${modifiedSpeed}&spin=${modifiedSpin}&vla=${modifiedVLA}`
+        const modData = await getCarryDataFromServer(
+          modifiedSpeed,
+          modifiedSpin,
+          modifiedVLA
         );
-        const modData = await modResponse.json();
         setModifiedCarry(modData.Carry);
       } catch (error) {
         console.error("Error fetching carry distances:", error);

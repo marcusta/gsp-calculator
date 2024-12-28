@@ -15,7 +15,6 @@ import {
   getRoughSpinPenalty,
   getRoughVLAPenalty,
 } from "@/penalty";
-import { getCarryFromServer } from "@/api";
 import { Info } from "lucide-react";
 import {
   Tooltip,
@@ -23,6 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getCarryDataFromServer, type CarryData } from "@/api";
 
 interface CarryResult {
   ballSpeed: number;
@@ -55,9 +55,9 @@ export function ShotSuggester() {
     ballSpeed: number,
     spin: number,
     vla: number
-  ): Promise<number> => {
+  ): Promise<CarryData> => {
     console.log("calculateCarry by getting from server", ballSpeed, spin, vla);
-    return await getCarryFromServer(ballSpeed, spin, vla);
+    return await getCarryDataFromServer(ballSpeed, spin, vla);
   };
 
   const handleCalculate = async () => {
@@ -104,8 +104,8 @@ export function ShotSuggester() {
             ballSpeed: speed,
             spin: avgSpin,
             vla: avgVLA,
-            rawCarry,
-            estimatedCarry,
+            rawCarry: rawCarry.Carry,
+            estimatedCarry: estimatedCarry.Carry,
             modifiers: {
               speedPenalty,
               spinPenalty,
