@@ -56,6 +56,7 @@ export function ShotSuggester() {
     spin: number,
     vla: number
   ): Promise<number> => {
+    console.log("calculateCarry by getting from server", ballSpeed, spin, vla);
     return await getCarryFromServer(ballSpeed, spin, vla);
   };
 
