@@ -8,10 +8,10 @@ const trajectoryService = new TrajectoryService();
 const suggestShotService = new SuggestShotService();
 
 app.get("/trajectory", async (c) => {
-  console.log("Received request");
   const ballSpeed = Number(c.req.query("ballSpeed"));
   const spin = Number(c.req.query("spin"));
   const vla = Number(c.req.query("vla"));
+  console.log("Received request", ballSpeed, spin, vla);
 
   // Validate inputs
   if (isNaN(ballSpeed) || isNaN(spin) || isNaN(vla)) {
@@ -56,6 +56,8 @@ app.get("/trajectory", async (c) => {
     if (!result) {
       return c.json({ error: "No matching trajectory found" }, 404);
     }
+
+    console.log("Result", result);
 
     return c.json(result);
   } catch (error) {

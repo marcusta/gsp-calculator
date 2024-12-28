@@ -13,11 +13,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/trajectory": {
-        target: "http://localhost:3004",
+        target: "http://localhost:3005",
         changeOrigin: true,
       },
       "/suggestShot": {
-        target: "http://localhost:3004",
+        target: "http://localhost:3005",
         changeOrigin: true,
       },
     },

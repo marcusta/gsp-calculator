@@ -23,6 +23,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getCarryDataFromServer, type CarryData } from "@/api";
+import { Switch } from "@/components/ui/switch";
+import { DistanceUnit, convertMetersToYards } from "@/types/units";
 
 interface CarryResult {
   ballSpeed: number;
@@ -43,6 +45,7 @@ export function ShotSuggester() {
   const [results, setResults] = useState<CarryResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unit, setUnit] = useState<DistanceUnit>("meters");
 
   // Filter PhyMatList to only include materials that have entries in the penalty tables
   const validMaterialIndices = [1, 3, 4, 6, 11, 12, 13, 16, 17];
@@ -131,6 +134,17 @@ export function ShotSuggester() {
   return (
     <div className="p-6 min-h-[600px]">
       <h2 className="text-2xl font-bold mb-6">Club Shot Calculator</h2>
+
+      <div className="flex items-center space-x-2 mb-4">
+        <Switch
+          id="unit-toggle"
+          checked={unit === "yards"}
+          onCheckedChange={(checked) => setUnit(checked ? "yards" : "meters")}
+        />
+        <Label htmlFor="unit-toggle" className="text-sm font-medium">
+          Show distances in yards
+        </Label>
+      </div>
 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -230,8 +244,22 @@ export function ShotSuggester() {
                 <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
                 <p>Launch Angle: {result.vla.toFixed(1)}°</p>
                 <div className="mt-2">
-                  <p>Raw Carry: {result.rawCarry.toFixed(1)}m</p>
-                  <p>With Penalties: {result.estimatedCarry.toFixed(1)}m</p>
+                  <p>
+                    Raw Carry:{" "}
+                    {(unit === "yards"
+                      ? convertMetersToYards(result.rawCarry)
+                      : result.rawCarry
+                    ).toFixed(1)}
+                    {unit}
+                  </p>
+                  <p>
+                    With Penalties:{" "}
+                    {(unit === "yards"
+                      ? convertMetersToYards(result.estimatedCarry)
+                      : result.estimatedCarry
+                    ).toFixed(1)}
+                    {unit}
+                  </p>
                   <p className="text-red-500">
                     Carry Reduced by{" "}
                     {calculatePenaltyPercentage(

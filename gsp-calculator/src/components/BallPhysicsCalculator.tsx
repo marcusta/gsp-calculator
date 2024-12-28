@@ -15,6 +15,8 @@ import {
   getRoughVLAPenalty,
 } from "@/penalty";
 import { getCarryDataFromServer } from "@/api";
+import { Switch } from "@/components/ui/switch";
+import { DistanceUnit, convertMetersToYards } from "@/types/units";
 
 export function BallPhysicsCalculator() {
   const [speed, setSpeed] = useState<number>(0);
@@ -24,6 +26,7 @@ export function BallPhysicsCalculator() {
   const [rawCarry, setRawCarry] = useState<number | null>(null);
   const [modifiedCarry, setModifiedCarry] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [unit, setUnit] = useState<DistanceUnit>("meters");
 
   // Calculate modifiers with error handling
   const calculatePenalties = () => {
@@ -144,6 +147,17 @@ export function BallPhysicsCalculator() {
           </div>
         </div>
 
+        <div className="flex items-center space-x-2 mb-4">
+          <Switch
+            id="unit-toggle"
+            checked={unit === "yards"}
+            onCheckedChange={(checked) => setUnit(checked ? "yards" : "meters")}
+          />
+          <Label htmlFor="unit-toggle" className="text-sm font-medium">
+            Show distances in yards
+          </Label>
+        </div>
+
         <div className="mt-6 space-y-4">
           <h3 className="text-lg font-semibold">Modifiers:</h3>
           <div className="grid grid-cols-3 gap-4 text-sm">
@@ -192,14 +206,22 @@ export function BallPhysicsCalculator() {
             <div>
               <p className="font-medium">Raw Carry:</p>
               <p>
-                {rawCarry ? `${rawCarry.toFixed(1)} meters` : "Not calculated"}
+                {rawCarry
+                  ? `${(unit === "yards"
+                      ? convertMetersToYards(rawCarry)
+                      : rawCarry
+                    ).toFixed(1)} ${unit}`
+                  : "Not calculated"}
               </p>
             </div>
             <div>
               <p className="font-medium">Modified Carry:</p>
               <p>
                 {modifiedCarry
-                  ? `${modifiedCarry.toFixed(1)} meters`
+                  ? `${(unit === "yards"
+                      ? convertMetersToYards(modifiedCarry)
+                      : modifiedCarry
+                    ).toFixed(1)} ${unit}`
                   : "Not calculated"}
               </p>
             </div>

@@ -1,7 +1,5 @@
 const urlBase =
-  window.location.hostname === "app.swedenindoorgolf.se"
-    ? "/gsp-calc"
-    : "http://localhost:3005";
+  window.location.hostname === "app.swedenindoorgolf.se" ? "/gsp-calc" : "";
 
 export interface CarryData {
   BallSpeed: number;
