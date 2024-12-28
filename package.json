@@ -1,0 +1,16 @@
+{
+  "name": "trajectory-importer",
+  "module": "src/import-csv.ts",
+  "type": "module",
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.3",
+    "hono": "^4.6.14"
+  },
+  "scripts": {
+    "start": "bun run src/import-csv.ts",
+    "clean-db": "bun run src/clean-database.ts"
+  }
+}
