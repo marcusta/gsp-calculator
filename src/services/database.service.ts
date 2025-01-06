@@ -94,6 +94,48 @@ export class TrajectoryService {
     };
   }
 
+  async findOptimalLength(ballSpeed: number, maxVLA?: number) {
+    const params = {
+      $ballSpeed: ballSpeed,
+      $maxVLA: maxVLA ?? null, // Convert undefined to null
+    };
+
+    const query = `
+      WITH ValidTrajectories AS (
+        SELECT 
+          BallSpeed,
+          VLA,
+          BackSpin,
+          Carry,
+          HLA,
+          SpinAxis,
+          Offline,
+          CASE 
+            WHEN $maxVLA IS NOT NULL AND VLA > $maxVLA THEN -999999
+            ELSE 0 
+          END as vla_penalty
+        FROM trajectories
+        WHERE ABS(BallSpeed - $ballSpeed) < 0.1
+      )
+      SELECT 
+        BallSpeed,
+        VLA,
+        BackSpin,
+        Carry,
+        HLA,
+        SpinAxis,
+        Offline
+      FROM ValidTrajectories
+      ORDER BY Carry + vla_penalty DESC
+      LIMIT 1
+    `;
+
+    const result = this.db.prepare(query).get(params) as
+      | TrajectoryResult
+      | undefined;
+    return result;
+  }
+
   private lerp(start: number, end: number, t: number): number {
     if (start === end) {
       return start;

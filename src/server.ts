@@ -101,6 +101,66 @@ app.post("/suggestShot", async (c) => {
   }
 });
 
+app.get("/optimize-length", async (c) => {
+  const ballSpeed = Number(c.req.query("ballSpeed"));
+  const maxVLA = c.req.query("maxVLA")
+    ? Number(c.req.query("maxVLA"))
+    : undefined;
+
+  // Validate input
+  if (isNaN(ballSpeed)) {
+    return c.json(
+      {
+        error: "Invalid parameter. ballSpeed is required and must be a number",
+      },
+      400
+    );
+  }
+
+  if (maxVLA !== undefined && isNaN(maxVLA)) {
+    return c.json(
+      {
+        error: "Invalid parameter. maxVLA must be a number if provided",
+      },
+      400
+    );
+  }
+
+  // Validate ranges
+  if (ballSpeed < 2 || ballSpeed > 200) {
+    return c.json(
+      {
+        error: "Ball speed out of range",
+        validRange: "2-200 mph",
+      },
+      400
+    );
+  }
+
+  if (maxVLA !== undefined && (maxVLA < 4 || maxVLA > 50)) {
+    return c.json(
+      {
+        error: "Max VLA out of range",
+        validRange: "4-50 degrees",
+      },
+      400
+    );
+  }
+
+  try {
+    const result = await trajectoryService.findOptimalLength(ballSpeed, maxVLA);
+
+    if (!result) {
+      return c.json({ error: "No matching trajectory found" }, 404);
+    }
+
+    return c.json(result);
+  } catch (error) {
+    console.error("Error finding optimal trajectory:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 // Add a simple health check endpoint
 app.get("/health", (c) => c.json({ status: "ok" }));
 

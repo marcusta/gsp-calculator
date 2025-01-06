@@ -80,10 +80,12 @@ export function ShotSuggester() {
       const avgSpin = (club.spinMax + club.spinMin) / 2;
       const avgVLA = (club.vlaMax + club.vlaMin) / 2;
 
-      // Calculate for three different speeds: min, middle, and max
+      // Calculate for five different speeds instead of three
       const speeds = [
         club.speedMin,
-        club.speedMin + speedRange / 2,
+        club.speedMin + speedRange * 0.25, // 25% power
+        club.speedMin + speedRange * 0.5, // 50% power
+        club.speedMin + speedRange * 0.75, // 75% power
         club.speedMax,
       ];
 
@@ -287,7 +289,11 @@ export function ShotSuggester() {
                     {index === 0
                       ? "Minimum"
                       : index === 1
-                      ? "Middle"
+                      ? "Quarter"
+                      : index === 2
+                      ? "Half"
+                      : index === 3
+                      ? "Three-Quarter"
                       : "Maximum"}{" "}
                     Power
                   </h4>
