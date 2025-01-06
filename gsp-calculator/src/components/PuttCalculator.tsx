@@ -10,13 +10,17 @@ export function PuttCalculator() {
   );
   const [speed, setSpeed] = useState<string>("");
   const [distance, setDistance] = useState<string>("");
+  const [stimp, setStimp] = useState<number>(11);
+
+  // Add available stimp values
+  const stimpValues = [10, 11, 12, 13];
 
   const handleCalculate = () => {
     if (mode === "speedToDistance" && speed) {
-      const result = getDistanceForSpeed(Number(speed));
+      const result = getDistanceForSpeed(Number(speed), stimp);
       setDistance(result.toFixed(2));
     } else if (mode === "distanceToSpeed" && distance) {
-      const result = getSpeedForDistance(Number(distance));
+      const result = getSpeedForDistance(Number(distance), stimp);
       setSpeed(result.toFixed(2));
     }
   };
@@ -31,6 +35,26 @@ export function PuttCalculator() {
       <h2 className="text-2xl font-bold mb-6">Putt Calculator</h2>
 
       <div className="space-y-6 max-w-xl">
+        {/* Stimp Selection */}
+        <div className="space-y-2">
+          <Label>Stimp Speed</Label>
+          <div className="flex gap-2 mb-4">
+            {stimpValues.map((stimpValue) => (
+              <button
+                key={stimpValue}
+                onClick={() => setStimp(stimpValue)}
+                className={`px-4 py-2 rounded font-medium ${
+                  stimp === stimpValue
+                    ? "bg-blue-500 text-white"
+                    : "bg-white text-gray-900 border border-gray-300 hover:bg-gray-100"
+                }`}
+              >
+                Stimp {stimpValue}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex items-center space-x-2">
           <Switch
             id="mode-toggle"
@@ -79,13 +103,13 @@ export function PuttCalculator() {
 
           <div className="space-x-4">
             <button
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-lg"
               onClick={handleCalculate}
             >
               Calculate
             </button>
             <button
-              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-lg"
               onClick={handleClear}
             >
               Clear

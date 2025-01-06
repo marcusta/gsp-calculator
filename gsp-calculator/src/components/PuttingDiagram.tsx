@@ -1,4 +1,8 @@
-import { getSpeedForDistance, SpeedDistanceData } from "@/putting";
+import {
+  getSpeedForDistance,
+  SpeedDistanceData,
+  getAvailableStimps,
+} from "@/putting";
 import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -10,6 +14,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { useState } from "react";
 
 // Register ChartJS components
 ChartJS.register(
@@ -23,27 +28,34 @@ ChartJS.register(
 );
 
 // Generate data points for a smooth curve
-function generateSmoothData(start: number, end: number, steps: number) {
+function generateSmoothData(
+  start: number,
+  end: number,
+  steps: number,
+  stimp: number
+) {
   const data: SpeedDistanceData[] = [];
   for (
     let distance = start;
     distance <= end;
     distance += (end - start) / steps
   ) {
-    const speed = getSpeedForDistance(distance);
+    const speed = getSpeedForDistance(distance, stimp);
     data.push({ distance, speed });
   }
   return data;
 }
 
 export function PuttingDiagram() {
-  const smoothData = generateSmoothData(2, 22, 30);
+  const [selectedStimp, setSelectedStimp] = useState(11);
+  const availableStimps = getAvailableStimps();
+  const smoothData = generateSmoothData(2, 22, 30, selectedStimp);
 
   const data = {
     labels: smoothData.map((point) => point.distance.toFixed(1)),
     datasets: [
       {
-        label: "Ball Speed vs Distance",
+        label: `Ball Speed vs Distance (Stimp ${selectedStimp})`,
         data: smoothData.map((point) => point.speed),
         borderColor: "rgb(59, 130, 246)",
         backgroundColor: "rgba(59, 130, 246, 0.5)",
@@ -85,6 +97,21 @@ export function PuttingDiagram() {
       <h2 className="text-2xl font-bold mb-6">
         Putting Distance-Speed Diagram
       </h2>
+      <div className="flex gap-2 mb-4">
+        {availableStimps.map((stimp) => (
+          <button
+            key={stimp}
+            onClick={() => setSelectedStimp(stimp)}
+            className={`px-4 py-2 rounded font-medium ${
+              selectedStimp === stimp
+                ? "bg-blue-500 text-white"
+                : "bg-white text-gray-900 border border-gray-300 hover:bg-gray-100"
+            }`}
+          >
+            Stimp {stimp}
+          </button>
+        ))}
+      </div>
       <div className="w-full max-w-3xl mx-auto">
         <Line options={options} data={data} />
       </div>
