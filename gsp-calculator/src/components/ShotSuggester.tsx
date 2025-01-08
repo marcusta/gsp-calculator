@@ -27,6 +27,9 @@ import { suggestShot } from "@/trajectory";
 import { getRoughSpeedPenalty } from "@/penalty";
 import { getRoughSpinPenalty, getRoughVLAPenalty } from "@/penalty";
 import { calculateOfflineDeviation } from "@/lie-calculation";
+import { formatMaterialNameForUI } from "../material";
+import { getAltitudeModifier } from "@/penalty";
+import { getElevationDistanceModifier } from "@/penalty";
 
 interface ShotSuggestion {
   club: string;
@@ -40,6 +43,8 @@ interface ShotSuggestion {
   launchAngle: number;
   vlaModifier: number;
   offlineDeviation: number;
+  altitudeModifier: number;
+  elevationModifier: number;
 }
 
 export function ShotSuggester() {
@@ -51,9 +56,11 @@ export function ShotSuggester() {
   const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
+  const [altitude, setAltitude] = useState<string>("0");
+  const [elevationDiff, setElevationDiff] = useState<string>("0");
 
   // Filter PhyMatList to only include materials that have entries in the penalty tables
-  const validMaterialIndices = [1, 3, 4, 6, 11, 12, 13, 16, 17];
+  const validMaterialIndices = [18, 2, 1, 3, 4, 6, 11, 12, 13, 16, 17];
   const validMaterials = validMaterialIndices.map((index) => ({
     index,
     name: PhyMatList[index],
@@ -63,58 +70,99 @@ export function ShotSuggester() {
     setLoading(true);
     setError(null);
     try {
+      // Convert target distance and elevation difference
       const targetDistance =
         unit === "yards"
           ? convertYardsToMeters(parseFloat(targetCarry))
           : parseFloat(targetCarry);
 
+      const elevationDiffMeters =
+        unit === "yards"
+          ? convertYardsToMeters(parseFloat(elevationDiff) || 0)
+          : parseFloat(elevationDiff) || 0;
+
       if (isNaN(targetDistance)) {
         throw new Error("Please enter a valid target distance");
       }
 
-      const suggestion = await suggestShot(
+      // Get initial shot suggestion without modifiers to get approximate ball parameters
+      const initialSuggestion = await suggestShot(
         targetDistance,
         materialIndex,
         parseFloat(upDownLie) || 0
       );
 
-      // Get the modifiers
+      // Get the material modifiers using initial parameters
       const speedModifier = getRoughSpeedPenalty(
         materialIndex,
-        suggestion.ballSpeed,
-        suggestion.vla
+        initialSuggestion.ballSpeed,
+        initialSuggestion.vla
       );
       const spinModifier = getRoughSpinPenalty(
         materialIndex,
-        suggestion.ballSpeed,
-        suggestion.vla
+        initialSuggestion.ballSpeed,
+        initialSuggestion.vla
       );
       const vlaModifier = getRoughVLAPenalty(
         materialIndex,
-        suggestion.ballSpeed,
-        suggestion.vla
+        initialSuggestion.ballSpeed,
+        initialSuggestion.vla
+      );
+
+      // Calculate actual ball parameters after material effects
+      const actualBallSpeed = initialSuggestion.ballSpeed / speedModifier;
+      const actualSpin = initialSuggestion.spin / spinModifier;
+      const actualVLA = initialSuggestion.vla / vlaModifier;
+
+      // Calculate elevation effect using actual ball parameters
+      const elevationModifier = getElevationDistanceModifier(
+        targetDistance,
+        elevationDiffMeters,
+        actualBallSpeed,
+        actualSpin,
+        actualVLA
+      );
+
+      // Apply altitude modifier
+      const altitudeModifier = getAltitudeModifier(parseFloat(altitude) || 0);
+
+      // Adjust target distance for elevation and altitude before club selection
+      const adjustedTargetDistance =
+        (targetDistance - elevationModifier) / altitudeModifier;
+
+      // Get final shot suggestion with adjusted target distance
+      const suggestion = await suggestShot(
+        adjustedTargetDistance,
+        materialIndex,
+        parseFloat(upDownLie) || 0
       );
 
       // Calculate offline deviation
       const offlineDeviation = calculateOfflineDeviation(
-        suggestion.vla,
+        actualVLA,
         parseFloat(rightLeftLie) || 0,
         suggestion.estimatedCarry
       );
+
+      // Calculate final carry with all modifiers
+      const finalCarry =
+        suggestion.estimatedCarry * altitudeModifier + elevationModifier;
 
       setSuggestions([
         {
           club: suggestion.clubName,
           power: suggestion.powerPercentage,
-          estimatedCarry: suggestion.estimatedCarry,
+          estimatedCarry: finalCarry,
           rawCarry: suggestion.rawCarry,
-          ballSpeed: suggestion.ballSpeed / speedModifier, // Convert back to raw speed
+          ballSpeed: actualBallSpeed,
           speedModifier,
-          spin: suggestion.spin / spinModifier, // Convert back to raw spin
+          spin: actualSpin,
           spinModifier,
-          launchAngle: suggestion.vla / vlaModifier, // Convert back to raw VLA
+          launchAngle: actualVLA,
           vlaModifier,
           offlineDeviation,
+          altitudeModifier,
+          elevationModifier,
         },
       ]);
     } catch (err) {
@@ -164,7 +212,7 @@ export function ShotSuggester() {
               <SelectContent>
                 {validMaterials.map(({ index, name }) => (
                   <SelectItem key={index} value={index.toString()}>
-                    {name}
+                    {formatMaterialNameForUI(name)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -173,6 +221,56 @@ export function ShotSuggester() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="altitude">
+              Altitude (feet)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Height above sea level.
+                    <br />
+                    Shots travel ~1% further per 500ft of altitude
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="altitude"
+              type="number"
+              value={altitude}
+              onChange={(e) => setAltitude(e.target.value)}
+              className="bg-background"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="elevation-diff">
+              Elevation Difference ({unit})
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Height difference between ball and target.
+                    <br />
+                    Positive = uphill
+                    <br />
+                    Negative = downhill
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="elevation-diff"
+              type="number"
+              value={elevationDiff}
+              onChange={(e) => setElevationDiff(e.target.value)}
+              className="bg-background"
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="updown-lie">
               Up/Down Slope (degrees)
@@ -281,6 +379,19 @@ export function ShotSuggester() {
                     ).toFixed(1)}{" "}
                     {unit} {suggestion.offlineDeviation > 0 ? "left" : "right"}
                     {suggestion.offlineDeviation === 0 ? "straight" : ""}
+                  </p>
+                  <p>
+                    Altitude Effect: +
+                    {((suggestion.altitudeModifier - 1) * 100).toFixed(1)}%
+                  </p>
+                  <p>
+                    Elevation Effect:{" "}
+                    {(unit === "yards"
+                      ? convertMetersToYards(suggestion.elevationModifier)
+                      : suggestion.elevationModifier
+                    ).toFixed(1)}{" "}
+                    {unit}{" "}
+                    {suggestion.elevationModifier > 0 ? "shorter" : "longer"}
                   </p>
                 </div>
               ))}

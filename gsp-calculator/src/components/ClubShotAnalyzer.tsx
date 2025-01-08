@@ -14,6 +14,8 @@ import {
   getRoughSpeedPenalty,
   getRoughSpinPenalty,
   getRoughVLAPenalty,
+  getAltitudeModifier,
+  getElevationDistanceModifier,
 } from "@/penalty";
 import { Info } from "lucide-react";
 import {
@@ -30,6 +32,7 @@ import {
   getModifiedLieVla,
   calculateOfflineDeviation,
 } from "@/lie-calculation";
+import { formatMaterialNameForUI } from "../material";
 
 interface CarryResult {
   ballSpeed: number;
@@ -45,6 +48,78 @@ interface CarryResult {
   };
 }
 
+function calculateAdjustedCarry(
+  baseCarry: number,
+  altitude: string,
+  elevationDiff: string,
+  unit: DistanceUnit,
+  ballSpeed: number,
+  spin: number,
+  vla: number
+): number {
+  const altitudeModifier = getAltitudeModifier(parseFloat(altitude) || 0);
+  const elevationInMeters =
+    unit === "yards"
+      ? convertMetersToYards(parseFloat(elevationDiff) || 0)
+      : parseFloat(elevationDiff) || 0;
+
+  const elevationEffect = getElevationDistanceModifier(
+    baseCarry,
+    elevationInMeters,
+    ballSpeed,
+    spin,
+    vla
+  );
+
+  const adjustedCarry = baseCarry * altitudeModifier + elevationEffect;
+
+  return unit === "yards" ? convertMetersToYards(adjustedCarry) : adjustedCarry;
+}
+
+function formatCarryDistance(
+  result: CarryResult,
+  altitude: string,
+  elevationDiff: string,
+  unit: DistanceUnit
+): {
+  adjustedCarry: number;
+  elevationEffect: number;
+} {
+  const adjustedBallSpeed = result.ballSpeed * result.modifiers.speedPenalty;
+  const adjustedSpin = result.spin * result.modifiers.spinPenalty;
+
+  const elevationInMeters =
+    unit === "yards"
+      ? convertMetersToYards(parseFloat(elevationDiff) || 0)
+      : parseFloat(elevationDiff) || 0;
+
+  const elevationEffect = getElevationDistanceModifier(
+    result.estimatedCarry,
+    elevationInMeters,
+    adjustedBallSpeed,
+    adjustedSpin,
+    result.vla
+  );
+
+  const adjustedCarry = calculateAdjustedCarry(
+    result.estimatedCarry,
+    altitude,
+    elevationDiff,
+    unit,
+    adjustedBallSpeed,
+    adjustedSpin,
+    result.vla
+  );
+
+  return {
+    adjustedCarry,
+    elevationEffect:
+      unit === "yards"
+        ? convertMetersToYards(elevationEffect)
+        : elevationEffect,
+  };
+}
+
 export function ClubShotAnalyzer() {
   const [clubIndex, setClubIndex] = useState<number>(5); // Default to 7 iron
   const [materialIndex, setMaterialIndex] = useState<number>(1);
@@ -54,9 +129,11 @@ export function ClubShotAnalyzer() {
   const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
+  const [altitude, setAltitude] = useState<string>("0");
+  const [elevationDiff, setElevationDiff] = useState<string>("0");
 
   // Filter PhyMatList to only include materials that have entries in the penalty tables
-  const validMaterialIndices = [1, 3, 4, 6, 11, 12, 13, 16, 17];
+  const validMaterialIndices = [18, 2, 1, 3, 4, 6, 11, 12, 13, 16, 17];
   const validMaterials = validMaterialIndices.map((index) => ({
     index,
     name: PhyMatList[index],
@@ -211,7 +288,7 @@ export function ClubShotAnalyzer() {
               <SelectContent>
                 {validMaterials.map(({ index, name }) => (
                   <SelectItem key={index} value={index.toString()}>
-                    {name}
+                    {formatMaterialNameForUI(name)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -268,6 +345,58 @@ export function ClubShotAnalyzer() {
               className="bg-background"
             />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="altitude">
+            Altitude (feet)
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Height above sea level.
+                  <br />
+                  Shots travel ~1% further per 500ft of altitude
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+          <Input
+            id="altitude"
+            type="number"
+            value={altitude}
+            onChange={(e) => setAltitude(e.target.value)}
+            className="bg-background"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="elevation-diff">
+            Elevation Difference ({unit})
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Height difference between ball and target.
+                  <br />
+                  Positive = uphill
+                  <br />
+                  Negative = downhill
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
+          <Input
+            id="elevation-diff"
+            type="number"
+            value={elevationDiff}
+            onChange={(e) => setElevationDiff(e.target.value)}
+            className="bg-background"
+          />
         </div>
 
         <Button onClick={handleCalculate} disabled={loading}>
@@ -341,12 +470,34 @@ export function ClubShotAnalyzer() {
                   </p>
                   <p>
                     With Penalties:{" "}
-                    {(unit === "yards"
-                      ? convertMetersToYards(result.estimatedCarry)
-                      : result.estimatedCarry
-                    ).toFixed(1)}
+                    {formatCarryDistance(
+                      result,
+                      altitude,
+                      elevationDiff,
+                      unit
+                    ).adjustedCarry.toFixed(1)}
                     {unit}
                   </p>
+                  {parseFloat(elevationDiff) !== 0 && (
+                    <p>
+                      Elevation Effect:{" "}
+                      {formatCarryDistance(
+                        result,
+                        altitude,
+                        elevationDiff,
+                        unit
+                      ).elevationEffect.toFixed(1)}{" "}
+                      {unit}{" "}
+                      {formatCarryDistance(
+                        result,
+                        altitude,
+                        elevationDiff,
+                        unit
+                      ).elevationEffect > 0
+                        ? "shorter"
+                        : "longer"}
+                    </p>
+                  )}
                   <p className="text-red-500">
                     Carry Reduced by{" "}
                     {calculatePenaltyPercentage(

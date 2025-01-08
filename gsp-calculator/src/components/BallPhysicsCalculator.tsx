@@ -13,6 +13,8 @@ import {
   getRoughSpeedPenalty,
   getRoughSpinPenalty,
   getRoughVLAPenalty,
+  getAltitudeModifier,
+  getElevationDistanceModifier,
 } from "@/penalty";
 import { getCarryDataFromServer } from "@/api";
 import { Switch } from "@/components/ui/switch";
@@ -28,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
+import { formatMaterialNameForUI } from "../material";
 
 export function BallPhysicsCalculator() {
   const [speed, setSpeed] = useState<number>(0);
@@ -41,6 +44,8 @@ export function BallPhysicsCalculator() {
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
   const [offlineDeviation, setOfflineDeviation] = useState<number | null>(null);
+  const [altitude, setAltitude] = useState<string>("0");
+  const [elevationDiff, setElevationDiff] = useState<string>("0");
 
   // Calculate modifiers with error handling
   const calculatePenalties = () => {
@@ -76,7 +81,7 @@ export function BallPhysicsCalculator() {
   );
 
   // Filter PhyMatList to only include materials that have entries in the penalty tables
-  const validMaterialIndices = [1, 3, 4, 6, 11, 12, 13, 16, 17];
+  const validMaterialIndices = [18, 2, 1, 3, 4, 6, 11, 12, 13, 16, 17];
   const validMaterials = validMaterialIndices.map((index) => ({
     index,
     name: PhyMatList[index],
@@ -119,6 +124,72 @@ export function BallPhysicsCalculator() {
         setIsLoading(false);
       }
     }
+  };
+
+  const formatDistance = (
+    modifiedCarry: number,
+    unit: string,
+    elevationDiff: string,
+    modifiedSpeed: number,
+    modifiedSpin: number,
+    modifiedVLA: number
+  ): string => {
+    const elevationValue =
+      unit === "yards"
+        ? convertMetersToYards(parseFloat(elevationDiff) || 0)
+        : parseFloat(elevationDiff) || 0;
+
+    const altitudeModifier = getAltitudeModifier(
+      parseFloat(altitude) || 0,
+      modifiedCarry
+    );
+    const elevationModifier = getElevationDistanceModifier(
+      modifiedCarry,
+      elevationValue,
+      modifiedSpeed,
+      modifiedSpin,
+      modifiedVLA
+    );
+
+    const totalDistance =
+      unit === "yards"
+        ? convertMetersToYards(
+            modifiedCarry * altitudeModifier + elevationModifier
+          )
+        : modifiedCarry * altitudeModifier + elevationModifier;
+
+    return `${totalDistance.toFixed(1)} ${unit}`;
+  };
+
+  const formatElevationEffect = (
+    modifiedCarry: number,
+    unit: string,
+    elevationDiff: string,
+    modifiedSpeed: number,
+    modifiedSpin: number,
+    modifiedVLA: number
+  ): string => {
+    const elevationValue =
+      unit === "yards"
+        ? convertMetersToYards(parseFloat(elevationDiff) || 0)
+        : parseFloat(elevationDiff) || 0;
+
+    const elevationModifier = getElevationDistanceModifier(
+      modifiedCarry,
+      elevationValue,
+      modifiedSpeed,
+      modifiedSpin,
+      modifiedVLA
+    );
+
+    const convertedModifier =
+      unit === "yards"
+        ? convertMetersToYards(elevationModifier)
+        : elevationModifier;
+
+    const direction = elevationModifier > 0 ? "shorter" : "longer";
+
+    return `${convertedModifier.toFixed(1)} ${unit} ${direction}`;
   };
 
   return (
@@ -177,11 +248,63 @@ export function BallPhysicsCalculator() {
               <SelectContent>
                 {validMaterials.map(({ index, name }) => (
                   <SelectItem key={index} value={index.toString()}>
-                    {name}
+                    {formatMaterialNameForUI(name)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="altitude">
+              Altitude (feet)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Height above sea level.
+                    <br />
+                    Shots travel ~1% further per 500ft of altitude
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="altitude"
+              type="number"
+              value={altitude}
+              onChange={(e) => setAltitude(e.target.value)}
+              className="w-40"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="elevation-diff">
+              Elevation Difference ({unit})
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Height difference between ball and target.
+                    <br />
+                    Positive = uphill
+                    <br />
+                    Negative = downhill
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
+            <Input
+              id="elevation-diff"
+              type="number"
+              value={elevationDiff}
+              onChange={(e) => setElevationDiff(e.target.value)}
+              className="w-40"
+            />
           </div>
         </div>
 
@@ -307,10 +430,29 @@ export function BallPhysicsCalculator() {
               <p className="font-medium">Modified Carry:</p>
               <p>
                 {modifiedCarry
-                  ? `${(unit === "yards"
-                      ? convertMetersToYards(modifiedCarry)
-                      : modifiedCarry
-                    ).toFixed(1)} ${unit}`
+                  ? formatDistance(
+                      modifiedCarry,
+                      unit,
+                      elevationDiff,
+                      modifiedSpeed,
+                      modifiedSpin,
+                      modifiedVLA
+                    )
+                  : "Not calculated"}
+              </p>
+            </div>
+            <div className="col-span-2">
+              <p className="font-medium">Elevation Effect:</p>
+              <p>
+                {modifiedCarry
+                  ? formatElevationEffect(
+                      modifiedCarry,
+                      unit,
+                      elevationDiff,
+                      modifiedSpeed,
+                      modifiedSpin,
+                      modifiedVLA
+                    )
                   : "Not calculated"}
               </p>
             </div>
