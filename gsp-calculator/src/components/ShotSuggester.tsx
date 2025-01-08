@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -8,13 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { clubRanges, clubNames } from "@/trajectory";
 import { PhyMatList } from "@/material";
-import {
-  getRoughSpeedPenalty,
-  getRoughSpinPenalty,
-  getRoughVLAPenalty,
-} from "@/penalty";
 import { Info } from "lucide-react";
 import {
   Tooltip,
@@ -22,33 +17,35 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getCarryDataFromServer, type CarryData } from "@/api";
 import { Switch } from "@/components/ui/switch";
-import { DistanceUnit, convertMetersToYards } from "@/types/units";
-import { Input } from "@/components/ui/input";
 import {
-  getModifiedLieVla,
-  calculateOfflineDeviation,
-} from "@/lie-calculation";
+  DistanceUnit,
+  convertMetersToYards,
+  convertYardsToMeters,
+} from "@/types/units";
+import { suggestShot } from "@/trajectory";
+import { getRoughSpeedPenalty } from "@/penalty";
+import { getRoughSpinPenalty, getRoughVLAPenalty } from "@/penalty";
+import { calculateOfflineDeviation } from "@/lie-calculation";
 
-interface CarryResult {
-  ballSpeed: number;
-  spin: number;
-  vla: number;
-  rawCarry: number;
+interface ShotSuggestion {
+  club: string;
+  power: number;
   estimatedCarry: number;
+  rawCarry: number;
+  ballSpeed: number;
+  speedModifier: number;
+  spin: number;
+  spinModifier: number;
+  launchAngle: number;
+  vlaModifier: number;
   offlineDeviation: number;
-  modifiers: {
-    speedPenalty: number;
-    spinPenalty: number;
-    vlaPenalty: number;
-  };
 }
 
 export function ShotSuggester() {
-  const [clubIndex, setClubIndex] = useState<number>(5); // Default to 7 iron
+  const [targetCarry, setTargetCarry] = useState<string>("");
   const [materialIndex, setMaterialIndex] = useState<number>(1);
-  const [results, setResults] = useState<CarryResult[] | null>(null);
+  const [suggestions, setSuggestions] = useState<ShotSuggestion[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unit, setUnit] = useState<DistanceUnit>("meters");
@@ -62,90 +59,64 @@ export function ShotSuggester() {
     name: PhyMatList[index],
   }));
 
-  const calculateCarry = async (
-    ballSpeed: number,
-    spin: number,
-    vla: number
-  ): Promise<CarryData> => {
-    console.log("calculateCarry by getting from server", ballSpeed, spin, vla);
-    return await getCarryDataFromServer(ballSpeed, spin, vla);
-  };
-
   const handleCalculate = async () => {
     setLoading(true);
     setError(null);
     try {
-      const club = clubRanges[clubIndex];
-      const speedRange = club.speedMax - club.speedMin;
-      const avgSpin = (club.spinMax + club.spinMin) / 2;
-      const avgVLA = (club.vlaMax + club.vlaMin) / 2;
+      const targetDistance =
+        unit === "yards"
+          ? convertYardsToMeters(parseFloat(targetCarry))
+          : parseFloat(targetCarry);
 
-      // Calculate for five different speeds instead of three
-      const speeds = [
-        club.speedMin,
-        club.speedMin + speedRange * 0.25, // 25% power
-        club.speedMin + speedRange * 0.5, // 50% power
-        club.speedMin + speedRange * 0.75, // 75% power
-        club.speedMax,
-      ];
+      if (isNaN(targetDistance)) {
+        throw new Error("Please enter a valid target distance");
+      }
 
-      const results = await Promise.all(
-        speeds.map(async (speed) => {
-          // Apply penalties
-          const speedPenalty = getRoughSpeedPenalty(
-            materialIndex,
-            speed,
-            avgVLA
-          );
-          const spinPenalty = getRoughSpinPenalty(materialIndex, speed, avgVLA);
-          const vlaPenalty = getRoughVLAPenalty(materialIndex, speed, avgVLA);
-
-          const adjustedSpeed = speed * speedPenalty;
-          const adjustedSpin = avgSpin * spinPenalty;
-
-          // Apply lie angle modifications to VLA
-          const baseVLA = avgVLA * vlaPenalty;
-          const modifiedVLA = getModifiedLieVla(
-            baseVLA,
-            validateLieInput(upDownLie)
-          );
-
-          // Get raw carry (without lie angle)
-          const rawCarry = await calculateCarry(speed, avgSpin, avgVLA);
-          // Get estimated carry with penalties and lie angle
-          const estimatedCarry = await calculateCarry(
-            adjustedSpeed,
-            adjustedSpin,
-            modifiedVLA
-          );
-
-          // Calculate offline deviation if there's a right/left lie angle
-          const offlineDeviation =
-            validateLieInput(rightLeftLie) !== 0
-              ? calculateOfflineDeviation(
-                  modifiedVLA,
-                  validateLieInput(rightLeftLie),
-                  estimatedCarry.Carry
-                )
-              : 0;
-
-          return {
-            ballSpeed: speed,
-            spin: avgSpin,
-            vla: modifiedVLA,
-            rawCarry: rawCarry.Carry,
-            estimatedCarry: estimatedCarry.Carry,
-            offlineDeviation,
-            modifiers: {
-              speedPenalty,
-              spinPenalty,
-              vlaPenalty,
-            },
-          };
-        })
+      const suggestion = await suggestShot(
+        targetDistance,
+        materialIndex,
+        parseFloat(upDownLie) || 0
       );
 
-      setResults(results);
+      // Get the modifiers
+      const speedModifier = getRoughSpeedPenalty(
+        materialIndex,
+        suggestion.ballSpeed,
+        suggestion.vla
+      );
+      const spinModifier = getRoughSpinPenalty(
+        materialIndex,
+        suggestion.ballSpeed,
+        suggestion.vla
+      );
+      const vlaModifier = getRoughVLAPenalty(
+        materialIndex,
+        suggestion.ballSpeed,
+        suggestion.vla
+      );
+
+      // Calculate offline deviation
+      const offlineDeviation = calculateOfflineDeviation(
+        suggestion.vla,
+        parseFloat(rightLeftLie) || 0,
+        suggestion.estimatedCarry
+      );
+
+      setSuggestions([
+        {
+          club: suggestion.clubName,
+          power: suggestion.powerPercentage,
+          estimatedCarry: suggestion.estimatedCarry,
+          rawCarry: suggestion.rawCarry,
+          ballSpeed: suggestion.ballSpeed / speedModifier, // Convert back to raw speed
+          speedModifier,
+          spin: suggestion.spin / spinModifier, // Convert back to raw spin
+          spinModifier,
+          launchAngle: suggestion.vla / vlaModifier, // Convert back to raw VLA
+          vlaModifier,
+          offlineDeviation,
+        },
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -153,19 +124,9 @@ export function ShotSuggester() {
     }
   };
 
-  const calculatePenaltyPercentage = (raw: number, withPenalty: number) => {
-    const reduction = ((raw - withPenalty) / raw) * 100;
-    return reduction.toFixed(1);
-  };
-
-  const validateLieInput = (value: string): number => {
-    const num = parseFloat(value);
-    return isNaN(num) ? 0 : num;
-  };
-
   return (
     <div className="p-6 min-h-[600px]">
-      <h2 className="text-2xl font-bold mb-6">Club Shot Calculator</h2>
+      <h2 className="text-2xl font-bold mb-6">Shot Suggester</h2>
 
       <div className="flex items-center space-x-2 mb-4">
         <Switch
@@ -181,22 +142,14 @@ export function ShotSuggester() {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="club">Club</Label>
-            <Select
-              value={clubIndex.toString()}
-              onValueChange={(value) => setClubIndex(Number(value))}
-            >
-              <SelectTrigger className="bg-background">
-                <SelectValue placeholder="Select club" />
-              </SelectTrigger>
-              <SelectContent>
-                {clubNames.map((name, index) => (
-                  <SelectItem key={index} value={index.toString()}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="target-carry">Target Carry Distance ({unit})</Label>
+            <Input
+              id="target-carry"
+              type="number"
+              value={targetCarry}
+              onChange={(e) => setTargetCarry(e.target.value)}
+              className="bg-background"
+            />
           </div>
 
           <div className="space-y-2">
@@ -271,105 +224,67 @@ export function ShotSuggester() {
         </div>
 
         <Button onClick={handleCalculate} disabled={loading}>
-          {loading ? "Calculating..." : "Calculate"}
+          {loading ? "Calculating..." : "Get Shot Suggestions"}
         </Button>
 
         {error && <div className="text-red-500">{error}</div>}
 
-        {results && (
+        {suggestions && (
           <div className="mt-4 space-y-4">
-            <h3 className="font-semibold">
-              Shot Parameters for {clubNames[clubIndex]}:
-            </h3>
-
-            {results.map((result, index) => (
-              <div key={index} className="border p-4 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-semibold mb-2">
-                    {index === 0
-                      ? "Minimum"
-                      : index === 1
-                      ? "Quarter"
-                      : index === 2
-                      ? "Half"
-                      : index === 3
-                      ? "Three-Quarter"
-                      : "Maximum"}{" "}
-                    Power
-                  </h4>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-4 w-4 text-muted-foreground -translate-y-1" />
-                      </TooltipTrigger>
-                      <TooltipContent className="space-y-2 bg-blue-800">
-                        <p className="font-semibold">Applied Modifiers:</p>
-                        <p>
-                          Speed:{" "}
-                          {((1 - result.modifiers.speedPenalty) * 100).toFixed(
-                            1
-                          )}
-                          % reduction
-                        </p>
-                        <p>
-                          Spin:{" "}
-                          {((result.modifiers.spinPenalty - 1) * 100).toFixed(
-                            1
-                          )}
-                          % increase
-                        </p>
-                        <p>
-                          Launch Angle:{" "}
-                          {((result.modifiers.vlaPenalty - 1) * 100).toFixed(1)}
-                          % change
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <p>Ball Speed: {result.ballSpeed.toFixed(1)} mph</p>
-                <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
-                <p>Launch Angle: {result.vla.toFixed(1)}°</p>
-                <div className="mt-2">
+            <h3 className="font-semibold">Suggested Shots:</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              {suggestions.map((suggestion, index) => (
+                <div key={index} className="border p-4 rounded-lg">
+                  <h4 className="font-semibold mb-2">{suggestion.club}</h4>
+                  <p>Power: {suggestion.power.toFixed(1)}%</p>
+                  <p>
+                    Ball Speed: {suggestion.ballSpeed.toFixed(1)} mph
+                    <span className="text-muted-foreground ml-2">
+                      (×{suggestion.speedModifier.toFixed(3)})
+                    </span>
+                  </p>
+                  <p>
+                    Spin Rate: {suggestion.spin.toFixed(0)} rpm
+                    <span className="text-muted-foreground ml-2">
+                      (×{suggestion.spinModifier.toFixed(3)})
+                    </span>
+                  </p>
+                  <p>
+                    Launch Angle: {suggestion.launchAngle.toFixed(1)}°
+                    <span className="text-muted-foreground ml-2">
+                      (×{suggestion.vlaModifier.toFixed(3)})
+                    </span>
+                  </p>
                   <p>
                     Raw Carry:{" "}
                     {(unit === "yards"
-                      ? convertMetersToYards(result.rawCarry)
-                      : result.rawCarry
-                    ).toFixed(1)}
+                      ? convertMetersToYards(suggestion.rawCarry)
+                      : suggestion.rawCarry
+                    ).toFixed(1)}{" "}
                     {unit}
                   </p>
                   <p>
-                    With Penalties:{" "}
+                    Estimated Carry:{" "}
                     {(unit === "yards"
-                      ? convertMetersToYards(result.estimatedCarry)
-                      : result.estimatedCarry
-                    ).toFixed(1)}
+                      ? convertMetersToYards(suggestion.estimatedCarry)
+                      : suggestion.estimatedCarry
+                    ).toFixed(1)}{" "}
                     {unit}
                   </p>
-                  <p className="text-red-500">
-                    Carry Reduced by{" "}
-                    {calculatePenaltyPercentage(
-                      result.rawCarry,
-                      result.estimatedCarry
-                    )}
-                    %
+                  <p>
+                    Aim{" "}
+                    {(unit === "yards"
+                      ? convertMetersToYards(
+                          Math.abs(suggestion.offlineDeviation)
+                        )
+                      : Math.abs(suggestion.offlineDeviation)
+                    ).toFixed(1)}{" "}
+                    {unit} {suggestion.offlineDeviation > 0 ? "left" : "right"}
+                    {suggestion.offlineDeviation === 0 ? "straight" : ""}
                   </p>
-                  {result.offlineDeviation !== 0 && (
-                    <p className="text-yellow-500">
-                      Ball will travel{" "}
-                      {unit === "yards"
-                        ? convertMetersToYards(
-                            Math.abs(result.offlineDeviation)
-                          ).toFixed(1)
-                        : Math.abs(result.offlineDeviation).toFixed(1)}
-                      {unit} {result.offlineDeviation > 0 ? "right" : "left"} of
-                      target
-                    </p>
-                  )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>

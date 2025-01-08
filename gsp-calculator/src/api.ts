@@ -17,12 +17,10 @@ export async function getCarryDataFromServer(
   vla: number
 ): Promise<CarryData> {
   try {
-    console.log("urlBase", urlBase);
     const response = await fetch(
       `${urlBase}/trajectory?ballSpeed=${ballSpeed}&spin=${spin}&vla=${vla}`
     );
     const data = await response.json();
-    console.log("data", data);
     return data;
   } catch (error) {
     console.error("Error fetching trajectory:", error);

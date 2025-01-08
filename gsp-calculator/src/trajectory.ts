@@ -1,3 +1,11 @@
+import { getCarryDataFromServer } from "./api";
+import { getModifiedLieVla } from "./lie-calculation";
+import {
+  getRoughSpeedPenalty,
+  getRoughSpinPenalty,
+  getRoughVLAPenalty,
+} from "./penalty";
+
 interface ClubRanges {
   spinMin: number;
   spinMax: number;
@@ -180,65 +188,146 @@ interface ShotParameters {
   rawCarry: number;
 }
 
+interface SuggestedShot extends ShotParameters {
+  clubIndex: number;
+  clubName: string;
+  powerPercentage: number;
+}
+
 export async function suggestShot(
   targetCarry: number,
-  materialIndex: number
-): Promise<ShotParameters> {
-  // 1) Make a single POST request to the new server route.
-  //    You may also choose a "clubId" if your server expects that;
-  //    if you want the server to pick the club, you can omit or set it to something default.
-  const clubId = 5; // Example: "7 iron" index in your clubRanges – adjust as needed
-
-  const response = await fetch("/suggestShot", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      targetCarry,
-      clubId,
-      // optional: pass materialIndex if your server does penalty logic
-      materialIndex,
-    }),
-  });
-
-  // 2) Handle errors
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const msg = errorData.error || "Unknown error from /suggestShot";
-    throw new Error(msg);
-  }
-
-  // 3) Parse server response.
-  //    Suppose the server returns something like:
-  //    {
-  //      "rawBallSpeed": number,
-  //      "rawSpin": number,
-  //      "rawVLA": number,
-  //      "rawCarry": number,
-  //      "finalBallSpeed": number,
-  //      "finalSpin": number,
-  //      "finalVLA": number,
-  //      "finalCarry": number,
-  //      "diffFromTarget": number
-  //    }
-  //
-  //    We'll map that into the ShotParameters shape your UI expects:
-  const data = await response.json();
-  console.log("data", data);
-
-  // 4) Transform the server's structure to your ShotParameters interface
-  const shotParams: ShotParameters = {
-    ballSpeed: data.finalBallSpeed, // penalized speed
-    spin: data.finalSpin, // penalized spin
-    vla: data.finalVLA, // penalized launch angle
-    estimatedCarry: data.finalCarry, // penalized carry
-    rawCarry:
-      data.rawCarry || data.rawCarry === 0
-        ? data.rawCarry
-        : data.rawCarry ?? data.finalCarry,
-    // or default to data.finalCarry if server doesn't provide "rawCarry"
+  materialIndex: number,
+  lieDegrees: number
+): Promise<SuggestedShot> {
+  // Get speed modifier based on material and lie
+  const getSpeedModifier = (speed: number, vla: number) => {
+    return getRoughSpeedPenalty(materialIndex, speed, vla);
   };
 
-  return shotParams;
+  // Helper to calculate modified carry range for a club
+  const getModifiedCarryRange = (club: ClubRanges) => {
+    const avgVLA = (club.vlaMax + club.vlaMin) / 2;
+    const minSpeedMod = getSpeedModifier(club.speedMin, avgVLA);
+    const maxSpeedMod = getSpeedModifier(club.speedMax, avgVLA);
+    return {
+      minCarry: club.carryMin * minSpeedMod,
+      maxCarry: club.carryMax * maxSpeedMod,
+      avgVLA,
+    };
+  };
+
+  // First find the best club based on carry ranges
+  let bestClubIndex = -1;
+  let bestScore = Infinity;
+
+  clubRanges.forEach((club, index) => {
+    const { minCarry, maxCarry } = getModifiedCarryRange(club);
+    // Allow some flexibility in the ranges
+    const minAllowed = minCarry * 0.9;
+    const maxAllowed = maxCarry * 1.1;
+
+    if (targetCarry >= minAllowed && targetCarry <= maxAllowed) {
+      const rangeCenter = (minCarry + maxCarry) / 2;
+      const score = Math.abs(targetCarry - rangeCenter);
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestClubIndex = index;
+      }
+    }
+  });
+
+  if (bestClubIndex === -1) {
+    throw new Error("No suitable club found for the target carry distance");
+  }
+
+  // Function to try a specific club with carry data
+  async function tryClub(clubIndex: number): Promise<SuggestedShot> {
+    const club = clubRanges[clubIndex];
+    const speedRange = club.speedMax - club.speedMin;
+    const avgSpin = (club.spinMax + club.spinMin) / 2;
+    const avgVLA = (club.vlaMax + club.vlaMin) / 2;
+
+    // Try 5 different speeds
+    const speeds = [
+      club.speedMin,
+      club.speedMin + speedRange * 0.25,
+      club.speedMin + speedRange * 0.5,
+      club.speedMin + speedRange * 0.75,
+      club.speedMax,
+    ];
+
+    const results = await Promise.all(
+      speeds.map(async (speed) => {
+        const speedPenalty = getRoughSpeedPenalty(materialIndex, speed, avgVLA);
+        const spinPenalty = getRoughSpinPenalty(materialIndex, speed, avgVLA);
+        const vlaPenalty = getRoughVLAPenalty(materialIndex, speed, avgVLA);
+
+        const adjustedSpeed = speed * speedPenalty;
+        const adjustedSpin = avgSpin * spinPenalty;
+        const adjustedVLA = avgVLA * vlaPenalty;
+        const modifiedVLA = getModifiedLieVla(adjustedVLA, lieDegrees);
+
+        // Get both raw and modified carry distances
+        const [rawCarry, modifiedCarry] = await Promise.all([
+          getCarryDataFromServer(speed, avgSpin, avgVLA).then(
+            (data) => data.Carry
+          ),
+          getCarryDataFromServer(adjustedSpeed, adjustedSpin, modifiedVLA).then(
+            (data) => data.Carry
+          ),
+        ]);
+
+        return {
+          ballSpeed: adjustedSpeed,
+          spin: adjustedSpin,
+          vla: modifiedVLA,
+          estimatedCarry: modifiedCarry,
+          rawCarry: rawCarry,
+          powerPercentage: ((speed - club.speedMin) / speedRange) * 100,
+          clubIndex,
+          clubName: clubNames[clubIndex],
+        };
+      })
+    );
+
+    // Find the result closest to target carry
+    return results.reduce((best, current) => {
+      const currentDiff = Math.abs(current.estimatedCarry - targetCarry);
+      const bestDiff = Math.abs(best.estimatedCarry - targetCarry);
+      return currentDiff < bestDiff ? current : best;
+    });
+  }
+
+  // Try the initially selected club
+  let bestResult = await tryClub(bestClubIndex);
+  const ACCEPTABLE_DIFF = 5; // 5 meters difference is acceptable
+
+  // If initial result isn't close enough, try one adjacent club
+  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF) {
+    if (bestResult.estimatedCarry < targetCarry && bestClubIndex > 0) {
+      // Try one stronger club
+      const strongerResult = await tryClub(bestClubIndex - 1);
+      if (
+        Math.abs(strongerResult.estimatedCarry - targetCarry) <
+        Math.abs(bestResult.estimatedCarry - targetCarry)
+      ) {
+        bestResult = strongerResult;
+      }
+    } else if (
+      bestResult.estimatedCarry > targetCarry &&
+      bestClubIndex < clubRanges.length - 1
+    ) {
+      // Try one weaker club
+      const weakerResult = await tryClub(bestClubIndex + 1);
+      if (
+        Math.abs(weakerResult.estimatedCarry - targetCarry) <
+        Math.abs(bestResult.estimatedCarry - targetCarry)
+      ) {
+        bestResult = weakerResult;
+      }
+    }
+  }
+
+  return bestResult;
 }

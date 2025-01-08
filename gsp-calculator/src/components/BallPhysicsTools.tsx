@@ -1,72 +1,38 @@
-import { useState } from "react";
 import { BallPhysicsCalculator } from "./BallPhysicsCalculator";
-import { ShotSuggester } from "./ShotSuggester";
+import { ClubShotAnalyzer } from "./ClubShotAnalyzer";
 import { PuttCalculator } from "./PuttCalculator";
 import { PuttingDiagram } from "./PuttingDiagram";
+import { ShotSuggester } from "./ShotSuggester";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 
 export function BallPhysicsTools() {
-  const [activeTab, setActiveTab] = useState<
-    "calculator" | "suggester" | "putter" | "puttDiagram"
-  >("calculator");
-
   return (
-    <div>
-      {/* Tab Navigation */}
-      <div className="flex border-b border-white/10">
-        <button
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeTab === "calculator"
-              ? "text-blue-400 border-b-2 border-blue-400"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-          onClick={() => setActiveTab("calculator")}
-        >
-          Physics Calculator
-        </button>
-        <button
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeTab === "suggester"
-              ? "text-blue-400 border-b-2 border-blue-400"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-          onClick={() => setActiveTab("suggester")}
-        >
-          Club Values
-        </button>
-        <button
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeTab === "putter"
-              ? "text-blue-400 border-b-2 border-blue-400"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-          onClick={() => setActiveTab("putter")}
-        >
-          Putt Calculator
-        </button>
-        <button
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeTab === "puttDiagram"
-              ? "text-blue-400 border-b-2 border-blue-400"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-          onClick={() => setActiveTab("puttDiagram")}
-        >
-          Putt Diagram
-        </button>
+    <Tabs defaultValue="calculator" className="w-full">
+      <div className="w-full overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+        <TabsList className="w-max min-w-full flex-nowrap">
+          <TabsTrigger value="calculator">Ball Physics</TabsTrigger>
+          <TabsTrigger value="club-analyzer">Club Analysis</TabsTrigger>
+          <TabsTrigger value="shot-suggester">Shot Suggester</TabsTrigger>
+          <TabsTrigger value="putting">Putting</TabsTrigger>
+          <TabsTrigger value="putting-diagram">Putting Diagram</TabsTrigger>
+        </TabsList>
       </div>
 
-      {/* Content */}
-      <div className="text-slate-200">
-        {activeTab === "calculator" ? (
-          <BallPhysicsCalculator />
-        ) : activeTab === "suggester" ? (
-          <ShotSuggester />
-        ) : activeTab === "putter" ? (
-          <PuttCalculator />
-        ) : (
-          <PuttingDiagram />
-        )}
-      </div>
-    </div>
+      <TabsContent value="calculator">
+        <BallPhysicsCalculator />
+      </TabsContent>
+      <TabsContent value="club-analyzer">
+        <ClubShotAnalyzer />
+      </TabsContent>
+      <TabsContent value="shot-suggester">
+        <ShotSuggester />
+      </TabsContent>
+      <TabsContent value="putting">
+        <PuttCalculator />
+      </TabsContent>
+      <TabsContent value="putting-diagram">
+        <PuttingDiagram />
+      </TabsContent>
+    </Tabs>
   );
 }
