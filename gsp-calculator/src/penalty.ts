@@ -342,29 +342,10 @@ export function getRoughVLAPenaltyForSpeed(
  * Shots travel approximately 1% further per 500 feet of altitude.
  * @param altitude Altitude in feet above sea level
  */
-export function getAltitudeModifier(
-  altitude: number,
-  targetDistance = 1
-): number {
+export function getAltitudeModifier(altitude: number): number {
   // 1% increase per 500 feet
-  const distanceScaling = getDistanceScalingFactorForAltitude(
-    altitude,
-    targetDistance
-  );
-  console.log("distanceScaling", distanceScaling);
-  const rawAltitudeScaling = (altitude / 500) * 0.01;
-  const result = distanceScaling + rawAltitudeScaling;
-  console.log("rawAltitudeScaling", rawAltitudeScaling);
-  console.log("result", result);
-  return result;
-}
-
-function getDistanceScalingFactorForAltitude(
-  altitude: number,
-  targetDistance: number
-): number {
-  // Scaling should be larger with higher altitude and essentially no effect at 0 altitude
-  return 1 + ((targetDistance + altitude / 300) / 100) * 0.01;
+  const rawAltitudeScaling = (altitude / 500) * 0.0085;
+  return rawAltitudeScaling;
 }
 
 interface LaunchType {

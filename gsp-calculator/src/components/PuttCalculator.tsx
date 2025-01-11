@@ -11,16 +11,25 @@ export function PuttCalculator() {
   const [speed, setSpeed] = useState<string>("");
   const [distance, setDistance] = useState<string>("");
   const [stimp, setStimp] = useState<number>(11);
+  const [useMetric, setUseMetric] = useState<boolean>(true);
 
   // Add available stimp values
   const stimpValues = [10, 11, 12, 13];
 
   const handleCalculate = () => {
     if (mode === "speedToDistance" && speed) {
-      const result = getDistanceForSpeed(Number(speed), stimp);
+      let result = getDistanceForSpeed(Number(speed), stimp);
+      // Convert meters to feet if using imperial
+      if (!useMetric) {
+        result = result * 3.28084;
+      }
       setDistance(result.toFixed(2));
     } else if (mode === "distanceToSpeed" && distance) {
-      const result = getSpeedForDistance(Number(distance), stimp);
+      // Convert feet to meters if using imperial
+      const distanceInMeters = useMetric
+        ? Number(distance)
+        : Number(distance) / 3.28084;
+      const result = getSpeedForDistance(distanceInMeters, stimp);
       setSpeed(result.toFixed(2));
     }
   };
@@ -35,6 +44,18 @@ export function PuttCalculator() {
       <h2 className="text-2xl font-bold mb-6">Putt Calculator</h2>
 
       <div className="space-y-6 max-w-xl">
+        {/* Unit Selection */}
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="unit-toggle"
+            checked={useMetric}
+            onCheckedChange={setUseMetric}
+          />
+          <Label htmlFor="unit-toggle">
+            {useMetric ? "Metric (meters)" : "Imperial (feet)"}
+          </Label>
+        </div>
+
         {/* Stimp Selection */}
         <div className="space-y-2">
           <Label>Stimp Speed</Label>
@@ -87,12 +108,14 @@ export function PuttCalculator() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="distance">Distance (meters)</Label>
+            <Label htmlFor="distance">
+              Distance ({useMetric ? "meters" : "feet"})
+            </Label>
             <Input
               id="distance"
               type="number"
               min="0"
-              max="20"
+              max={useMetric ? 20 : 65} // Adjusted max for feet
               step="0.1"
               value={distance}
               onChange={(e) => setDistance(e.target.value)}

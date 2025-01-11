@@ -1,7 +1,7 @@
 import {
-  getSpeedForDistance,
   SpeedDistanceData,
   getAvailableStimps,
+  getDistanceForSpeed,
 } from "@/putting";
 import { Line } from "react-chartjs-2";
 import {
@@ -15,6 +15,8 @@ import {
   Legend,
 } from "chart.js";
 import { useState } from "react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 // Register ChartJS components
 ChartJS.register(
@@ -27,20 +29,22 @@ ChartJS.register(
   Legend
 );
 
-// Generate data points for a smooth curve
-function generateSmoothData(
-  start: number,
-  end: number,
-  steps: number,
-  stimp: number
+// Generate data points for speed increments
+function generateSpeedBasedData(
+  startSpeed: number,
+  endSpeed: number,
+  speedStep: number,
+  stimp: number,
+  useMetric: boolean
 ) {
   const data: SpeedDistanceData[] = [];
-  for (
-    let distance = start;
-    distance <= end;
-    distance += (end - start) / steps
-  ) {
-    const speed = getSpeedForDistance(distance, stimp);
+
+  for (let speed = startSpeed; speed <= endSpeed; speed += speedStep) {
+    let distance = getDistanceForSpeed(speed, stimp);
+    // Convert to feet if using imperial
+    if (!useMetric) {
+      distance = distance * 3.28084;
+    }
     data.push({ distance, speed });
   }
   return data;
@@ -48,8 +52,17 @@ function generateSmoothData(
 
 export function PuttingDiagram() {
   const [selectedStimp, setSelectedStimp] = useState(11);
+  const [useMetric, setUseMetric] = useState(true);
   const availableStimps = getAvailableStimps();
-  const smoothData = generateSmoothData(2, 22, 30, selectedStimp);
+
+  // Generate data points from 2mph to 16mph in 0.5mph increments
+  const smoothData = generateSpeedBasedData(
+    2, // start speed (mph)
+    16, // end speed (mph)
+    0.5, // speed increment (mph)
+    selectedStimp,
+    useMetric
+  );
 
   const data = {
     labels: smoothData.map((point) => point.distance.toFixed(1)),
@@ -80,7 +93,7 @@ export function PuttingDiagram() {
       x: {
         title: {
           display: true,
-          text: "Distance (meters)",
+          text: `Distance (${useMetric ? "meters" : "feet"})`,
         },
       },
       y: {
@@ -97,6 +110,18 @@ export function PuttingDiagram() {
       <h2 className="text-2xl font-bold mb-6">
         Putting Distance-Speed Diagram
       </h2>
+
+      <div className="flex items-center space-x-2 mb-4">
+        <Switch
+          id="unit-toggle"
+          checked={useMetric}
+          onCheckedChange={setUseMetric}
+        />
+        <Label htmlFor="unit-toggle">
+          {useMetric ? "Metric (meters)" : "Imperial (feet)"}
+        </Label>
+      </div>
+
       <div className="flex gap-2 mb-4">
         {availableStimps.map((stimp) => (
           <button
