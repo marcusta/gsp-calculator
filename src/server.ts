@@ -1,104 +1,109 @@
 import { readFile } from "fs/promises";
 import { Hono, type Context } from "hono";
 import { TrajectoryService } from "./services/database.service";
+import { ShotCalculator } from "./services/shot-calculator";
 import { SuggestShotService } from "./services/suggest-shot.service";
 
 const app = new Hono();
 const trajectoryService = new TrajectoryService();
-const suggestShotService = new SuggestShotService();
+const suggestShotService = new SuggestShotService(trajectoryService);
+const shotCalculator = new ShotCalculator(trajectoryService);
 
-app.get("/trajectory", async (c) => {
-  const ballSpeed = Number(c.req.query("ballSpeed"));
-  const spin = Number(c.req.query("spin"));
-  const vla = Number(c.req.query("vla"));
-  console.log("Received request", ballSpeed, spin, vla);
-
-  // Validate inputs
-  if (isNaN(ballSpeed) || isNaN(spin) || isNaN(vla)) {
-    return c.json(
-      {
-        error:
-          "Invalid parameters. ballSpeed, spin, and vla are required numbers",
-      },
-      400
-    );
-  }
-
-  // Validate ranges
-  if (
-    ballSpeed < 2 ||
-    ballSpeed > 200 ||
-    spin < 200 ||
-    spin > 12000 ||
-    vla < 4 ||
-    vla > 50
-  ) {
-    return c.json(
-      {
-        error: "Parameters out of range",
-        validRanges: {
-          ballSpeed: "2-200",
-          spin: "200-12000",
-          vla: "4-50",
-        },
-      },
-      400
-    );
-  }
-
-  try {
-    const result = await trajectoryService.findClosestTrajectory(
-      ballSpeed,
-      spin,
-      vla
-    );
-
-    if (!result) {
-      return c.json({ error: "No matching trajectory found" }, 404);
-    }
-
-    console.log("Result", result);
-
-    return c.json(result);
-  } catch (error) {
-    console.error("Error finding trajectory:", error);
-    return c.json({ error: "Internal server error" }, 500);
-  }
+app.get("/materials", async (c) => {
+  return c.json([
+    { name: "semirough", title: "Semi Rough" },
+    { name: "fairway", title: "Fairway" },
+    { name: "tee", title: "Tee" },
+    { name: "rough", title: "Rough" },
+    { name: "earth", title: "Earth" },
+    { name: "pinestraw", title: "Pine Straw" },
+    { name: "leaves", title: "Leaves" },
+    { name: "deeprough", title: "Deep Rough" },
+    { name: "concrete", title: "Concrete" },
+    { name: "stone", title: "Stone" },
+    { name: "sand", title: "Sand" },
+  ]);
 });
 
+interface CalculateCarryRequest {
+  ballSpeed: number;
+  spin: number;
+  vla: number;
+  material: string;
+  upDownLie?: number;
+  rightLeftLie?: number;
+  elevation?: number;
+  altitude?: number;
+}
+app.post("/calculate-carry", async (c) => {
+  const body: CalculateCarryRequest = await c.req.json();
+  const {
+    ballSpeed,
+    spin,
+    vla,
+    upDownLie,
+    rightLeftLie,
+    material,
+    elevation,
+    altitude,
+  } = body;
+  const result = await shotCalculator.calculateCarry(
+    ballSpeed,
+    spin,
+    vla,
+    material,
+    upDownLie,
+    rightLeftLie,
+    elevation,
+    altitude
+  );
+  return c.json(result);
+});
+
+interface SuggestShotRequest {
+  targetCarry: number;
+  material: string;
+  upDownLie?: number;
+  rightLeftLie?: number;
+  elevation?: number;
+  altitude?: number;
+}
 app.post("/suggestShot", async (c) => {
-  let body: {
-    targetCarry: number;
-    clubId: number;
-    materialIndex?: number;
-  };
+  let body: SuggestShotRequest = await c.req.json();
 
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
+  const {
+    targetCarry,
+    material,
+    upDownLie,
+    rightLeftLie,
+    elevation,
+    altitude,
+  } = body;
+
+  console.log("======================== new request =========================");
+  console.log("targetCarry", targetCarry);
+  console.log("material", material);
+  console.log("upDownLie", upDownLie);
+  console.log("rightLeftLie", rightLeftLie);
+  console.log("elevation", elevation);
+  console.log("altitude", altitude);
+
+  if (typeof targetCarry !== "number") {
+    return c.json({ error: "Missing or invalid targetCarry " }, 400);
   }
 
-  const { targetCarry, clubId, materialIndex } = body;
-
-  if (typeof targetCarry !== "number" || typeof clubId !== "number") {
-    return c.json({ error: "Missing or invalid targetCarry or clubId" }, 400);
+  const suggestion = await suggestShotService.getSuggestion(
+    targetCarry,
+    material,
+    upDownLie ?? 0,
+    rightLeftLie ?? 0,
+    elevation ?? 0,
+    altitude ?? 0
+  );
+  if (!suggestion) {
+    return c.json({ error: "No suitable shot found" }, 404);
   }
-
-  try {
-    const suggestion = await suggestShotService.getSuggestion(
-      targetCarry,
-      clubId,
-      materialIndex
-    );
-    if (!suggestion) {
-      return c.json({ error: "No suitable shot found" }, 404);
-    }
-    return c.json(suggestion, 200);
-  } catch (err) {
-    console.error("Error in getSuggestion:", err);
-    return c.json({ error: "Internal server error" }, 500);
-  }
+  return c.json(suggestion, 200);
 });
 
 app.get("/optimize-length", async (c) => {

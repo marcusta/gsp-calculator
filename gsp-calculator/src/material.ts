@@ -34,6 +34,7 @@ export const PhyMatList: string[] = [
  * Returns 19 if no match found.
  */
 export function getMaterialIndex(matName: string): number {
+  console.log("matName", matName);
   // Special case check for pinestraw (index 16)
   if (matName.includes(PhyMatList[16])) {
     return 16;

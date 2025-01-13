@@ -1,251 +1,218 @@
 // services/suggestShot.service.ts
-import { Database } from "bun:sqlite";
-import { clubRanges } from "./club-ranges";
+import { clubs, type Club } from "./club-ranges";
+import { TrajectoryService } from "./database.service";
 import {
   getRoughSpeedPenalty,
   getRoughSpinPenalty,
   getRoughVLAPenalty,
 } from "./penalty";
-
-interface TrajectoryRow {
-  BallSpeed: number;
-  VLA: number;
-  Backspin: number; // also called BackSpin in your code
-  Carry: number;
-}
+import { getModifiedLieVla } from "./shot-calculator";
 
 export class SuggestShotService {
-  private db: Database;
+  private trajectoryService: TrajectoryService;
 
-  constructor() {
-    this.db = new Database("data/trajectories.db");
+  constructor(trajectoryService: TrajectoryService) {
+    this.trajectoryService = trajectoryService;
   }
 
   /**
    * Main function that the route will call.
    *
    * @param targetCarry   desired carry distance (meters or yards)
-   * @param clubId        index in clubRanges, or your own identifier
-   * @param materialIndex optional for rough/fairway penalty
-   * @returns A single "best" shot object or undefined if none found
+   * @param material      material name
+   * @param upDownLie     up/down lie angle (degrees)
+   * @param rightLeftLie  right/left lie angle (degrees)
+   * @param elevation     elevation (meters)
+   * @param altitude      altitude (meters)
+   * @returns A single "best" shot object including club data and ball data
    */
   public async getSuggestion(
     targetCarry: number,
-    clubId: number,
-    materialIndex?: number
+    material: string,
+    upDownLie: number,
+    rightLeftLie: number,
+    elevation: number,
+    altitude: number
   ): Promise<ShotSuggestion | undefined> {
-    // 1) Validate the club ID
-    const club = clubRanges[clubId];
-    if (!club) {
-      console.warn(`No club found at index ${clubId}`);
-      return undefined;
-    }
-
-    // 2) Query the DB for rows in plausible range for THIS club
-    //    We’ll filter by the known speed/spin/VLA min/max
-    const sql = `
-      SELECT
-        BallSpeed, VLA, Backspin, Carry
-      FROM trajectories
-      WHERE 
-        BallSpeed >= $speedMin
-        AND BallSpeed <= $speedMax
-        AND VLA >= $vlaMin
-        AND VLA <= $vlaMax
-        AND Backspin >= $spinMin
-        AND Backspin <= $spinMax
-    `;
-    const rows: TrajectoryRow[] = this.db.query(sql).all({
-      $speedMin: club.speedMin,
-      $speedMax: club.speedMax,
-      $vlaMin: club.vlaMin,
-      $vlaMax: club.vlaMax,
-      $spinMin: club.spinMin,
-      $spinMax: club.spinMax,
-    }) as TrajectoryRow[];
-
-    if (!rows.length) {
-      console.warn(`No matching rows in DB for club ${club.name}`);
-      return undefined;
-    }
-
-    // 3) Search for the row whose "penalty-adjusted" carry is closest to target
-    let bestMatch: ShotSuggestion | null = null;
-    let bestDiff = Infinity;
-
-    for (const row of rows) {
-      // compute penalty if needed
-      let modSpeed = row.BallSpeed;
-      let modSpin = row.Backspin;
-      let modVLA = row.VLA;
-
-      if (materialIndex !== undefined) {
-        const speedPenalty = getRoughSpeedPenalty(
-          materialIndex,
-          row.BallSpeed,
-          row.VLA
-        );
-        const spinPenalty = getRoughSpinPenalty(
-          materialIndex,
-          row.BallSpeed,
-          row.VLA
-        );
-        const vlaPenalty = getRoughVLAPenalty(
-          materialIndex,
-          row.BallSpeed,
-          row.VLA
-        );
-
-        modSpeed *= speedPenalty;
-        modSpin *= spinPenalty;
-        modVLA *= vlaPenalty;
-      }
-
-      // Now that we have "adjusted" speed/spin/VLA,
-      // we do a second lookup to find the carry for those new, modified values.
-
-      const adjustedCarry = await this.findClosestCarry(
-        modSpeed,
-        modSpin,
-        modVLA
-      );
-
-      const diff = Math.abs(adjustedCarry - targetCarry);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        bestMatch = {
-          rawBallSpeed: row.BallSpeed,
-          rawSpin: row.Backspin,
-          rawVLA: row.VLA,
-          rawCarry: row.Carry,
-
-          finalBallSpeed: modSpeed,
-          finalSpin: modSpin,
-          finalVLA: modVLA,
-          finalCarry: adjustedCarry,
-          diffFromTarget: diff,
-        };
-      }
-
-      if (bestDiff < 1) {
-        // close enough, break early if you want
-        break;
-      }
-    }
-
-    return bestMatch ?? undefined;
-  }
-
-  /**
-   * Looks up or interpolates the carry for given speed/spin/vla in the DB.
-   * Similar to your existing "findClosestTrajectory".
-   */
-  private async findClosestCarry(
-    ballSpeed: number,
-    spin: number,
-    vla: number
-  ): Promise<number> {
-    // We can reuse your existing approach with a single query that picks
-    // the closest row(s) by speed, spin, vla. Here’s a simplified example:
-
-    // 1) Constrain to valid ranges for the DB
-    if (ballSpeed < 30) ballSpeed = 30;
-    if (ballSpeed > 180) ballSpeed = 180;
-    if (spin < 1200) spin = 1200;
-    if (spin > 12000) spin = 12000;
-    if (vla < 10) vla = 10;
-    if (vla > 40) vla = 40;
-
-    // 2) Let’s do something akin to your interpolation logic:
-    const row = this.db
-      .prepare(
-        `
-        WITH SpinVlaMatches AS (
-          SELECT *,
-          ABS(Backspin - $spin) / 200.0 + ABS(VLA - $vla) / 2.0 as match_score
-          FROM trajectories
-          ORDER BY match_score ASC
-          LIMIT 1
-        ),
-        BelowSpeed AS (
-          SELECT *
-          FROM trajectories t
-          WHERE t.BallSpeed <= $speed
-          AND t.Backspin = (SELECT Backspin FROM SpinVlaMatches)
-          AND t.VLA = (SELECT VLA FROM SpinVlaMatches)
-          ORDER BY t.BallSpeed DESC
-          LIMIT 1
-        ),
-        AboveSpeed AS (
-          SELECT *
-          FROM trajectories t
-          WHERE t.BallSpeed >= $speed
-          AND t.Backspin = (SELECT Backspin FROM SpinVlaMatches)
-          AND t.VLA = (SELECT VLA FROM SpinVlaMatches)
-          ORDER BY t.BallSpeed ASC
-          LIMIT 1
-        )
-        SELECT 
-          b.BallSpeed as below_speed,
-          b.Carry as below_carry,
-          a.BallSpeed as above_speed,
-          a.Carry as above_carry
-        FROM BelowSpeed b
-        LEFT JOIN AboveSpeed a ON 1=1
-      `
-      )
-      .get({
-        $speed: ballSpeed,
-        $spin: spin,
-        $vla: vla,
-      }) as
-      | {
-          below_speed: number | null;
-          below_carry: number | null;
-          above_speed: number | null;
-          above_carry: number | null;
-        }
-      | undefined;
-
-    if (!row) {
-      return 0;
-    }
-
-    // If we only found one match, or if the speeds are identical
-    if (
-      !row.above_speed ||
-      !row.below_speed ||
-      row.above_speed === row.below_speed
-    ) {
-      // Just return whichever carry is present
-      return row.below_carry ?? row.above_carry ?? 0;
-    }
-
-    // otherwise, linear interpolation
-    const t =
-      (ballSpeed - row.below_speed) / (row.above_speed - row.below_speed);
-
-    const carry = this.lerp(row.below_carry ?? 0, row.above_carry ?? 0, t);
-    return carry;
+    return suggestShot(
+      targetCarry,
+      material,
+      upDownLie,
+      rightLeftLie,
+      elevation,
+      altitude,
+      this.trajectoryService
+    );
   }
 
   private lerp(start: number, end: number, ratio: number): number {
     return start + (end - start) * Math.max(0, Math.min(1, ratio));
   }
-
-  public close() {
-    this.db.close();
-  }
 }
 
 export interface ShotSuggestion {
-  rawBallSpeed: number; // The "unpenalized" row's speed
-  rawSpin: number; // The "unpenalized" row's spin
-  rawVLA: number;
+  ballSpeed: number; // The "unpenalized" row's speed
+  spin: number; // The "unpenalized" row's spin
+  vla: number;
   rawCarry: number; // direct from DB
-  finalBallSpeed: number; // after penalty
-  finalSpin: number;
-  finalVLA: number;
-  finalCarry: number; // after penalty, from interpolation
-  diffFromTarget: number;
+  estimatedCarry: number;
+  clubName: string;
+}
+
+/**
+ * Main function that the route will call.
+ *
+ * @param targetCarry   desired carry distance (meters)
+ * @param material      material name
+ * @param upDownLie     up/down lie angle (degrees), positive is uphill and negative is downhill, 0 is none
+ * @param rightLeftLie  right/left lie angle (degrees), positive is right and negative is left, 0 is none
+ * @param elevation     elevation (meters), negative is downhill and positive is uphill
+ * @param altitude      altitude (feet), only positive values are supported. Ball flies longer with higher altitude.
+ * @returns A single "best" shot object including club data and ball data
+ */
+export async function suggestShot(
+  targetCarry: number,
+  material: string,
+  upDownLie: number,
+  rightLeftLie: number,
+  elevation: number,
+  altitude: number,
+  trajectoryService: TrajectoryService
+): Promise<ShotSuggestion | undefined> {
+  // Get speed modifier based on material and lie
+  const getSpeedModifier = (speed: number, vla: number) => {
+    return getRoughSpeedPenalty(material, speed, vla);
+  };
+
+  // Helper to calculate modified carry range for a club
+  const getModifiedCarryRange = (club: Club) => {
+    const avgVLA = (club.vlaMax + club.vlaMin) / 2;
+    const minSpeedMod = getSpeedModifier(club.speedMin, avgVLA);
+    const maxSpeedMod = getSpeedModifier(club.speedMax, avgVLA);
+    return {
+      minCarry: club.carryMin * minSpeedMod,
+      maxCarry: club.carryMax * maxSpeedMod,
+      avgVLA,
+    };
+  };
+
+  // First find the best club based on carry ranges
+  let bestClubIndex = -1;
+  let bestScore = Infinity;
+
+  clubs.forEach((club, index) => {
+    const { minCarry, maxCarry } = getModifiedCarryRange(club);
+    // Allow some flexibility in the ranges
+    const minAllowed = minCarry * 0.9;
+    const maxAllowed = maxCarry * 1.1;
+
+    if (targetCarry >= minAllowed && targetCarry <= maxAllowed) {
+      const rangeCenter = (minCarry + maxCarry) / 2;
+      const score = Math.abs(targetCarry - rangeCenter);
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestClubIndex = index;
+      }
+    }
+  });
+
+  if (bestClubIndex === -1) {
+    throw new Error("No suitable club found for the target carry distance");
+  }
+
+  // Function to try a specific club with carry data
+  async function tryClub(clubIndex: number): Promise<ShotSuggestion> {
+    const club = clubs[clubIndex];
+    const speedRange = club.speedMax - club.speedMin;
+    const avgSpin = (club.spinMax + club.spinMin) / 2;
+    const avgVLA = (club.vlaMax + club.vlaMin) / 2;
+
+    // Try 5 different speeds
+    const speeds = [
+      club.speedMin,
+      club.speedMin + speedRange * 0.25,
+      club.speedMin + speedRange * 0.5,
+      club.speedMin + speedRange * 0.75,
+      club.speedMax,
+    ];
+
+    const results = await Promise.all(
+      speeds.map(async (speed) => {
+        const speedPenalty = getRoughSpeedPenalty(material, speed, avgVLA);
+        const spinPenalty = getRoughSpinPenalty(material, speed, avgVLA);
+        const vlaPenalty = getRoughVLAPenalty(material, speed, avgVLA);
+
+        const adjustedSpeed = speed * speedPenalty;
+        const adjustedSpin = avgSpin * spinPenalty;
+        const adjustedVLA = avgVLA * vlaPenalty;
+        const modifiedVLA = getModifiedLieVla(adjustedVLA, upDownLie);
+
+        // Get both raw and modified carry distances
+        const rawCarryData = await trajectoryService.findClosestTrajectory(
+          speed,
+          avgSpin,
+          avgVLA
+        );
+        const modifiedCarryData = await trajectoryService.findClosestTrajectory(
+          adjustedSpeed,
+          adjustedSpin,
+          modifiedVLA
+        );
+
+        // Early return if we don't have valid carry data
+        if (!rawCarryData?.Carry || !modifiedCarryData?.Carry) {
+          return null;
+        }
+
+        return {
+          ballSpeed: adjustedSpeed,
+          spin: adjustedSpin,
+          vla: modifiedVLA,
+          estimatedCarry: modifiedCarryData.Carry,
+          rawCarry: rawCarryData.Carry,
+          clubName: club.name,
+        };
+      })
+    ).then((results) => results.filter((r): r is ShotSuggestion => r !== null));
+
+    // Find the result closest to target carry
+    return results.reduce((best, current) => {
+      const currentDiff = Math.abs(current.estimatedCarry! - targetCarry);
+      const bestDiff = Math.abs(best.estimatedCarry! - targetCarry);
+      return currentDiff < bestDiff ? current : best;
+    });
+  }
+
+  // Try the initially selected club
+  let bestResult = await tryClub(bestClubIndex);
+  const ACCEPTABLE_DIFF = 5; // 5 meters difference is acceptable
+
+  // If initial result isn't close enough, try one adjacent club
+  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF) {
+    if (bestResult.estimatedCarry < targetCarry && bestClubIndex > 0) {
+      // Try one stronger club
+      const strongerResult = await tryClub(bestClubIndex - 1);
+      if (
+        Math.abs(strongerResult.estimatedCarry - targetCarry) <
+        Math.abs(bestResult.estimatedCarry - targetCarry)
+      ) {
+        bestResult = strongerResult;
+      }
+    } else if (
+      bestResult.estimatedCarry > targetCarry &&
+      bestClubIndex < clubs.length - 1
+    ) {
+      // Try one weaker club
+      const weakerResult = await tryClub(bestClubIndex + 1);
+      if (
+        Math.abs(weakerResult.estimatedCarry - targetCarry) <
+        Math.abs(bestResult.estimatedCarry - targetCarry)
+      ) {
+        bestResult = weakerResult;
+      }
+    }
+  }
+
+  return bestResult;
 }
