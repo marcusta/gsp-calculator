@@ -94,6 +94,73 @@ export class TrajectoryService {
     };
   }
 
+  async findTrajectoryInRange(params: {
+    ballSpeedMin: number;
+    ballSpeedMax: number;
+    spinMin: number;
+    spinMax: number;
+    vlaMin: number;
+    vlaMax: number;
+    targetCarry: number;
+    material: string;
+  }) {
+    const query = `
+    WITH ValidShots AS (
+      SELECT 
+        *,
+        CASE 
+          WHEN '${params.material}' IN ('fairway', 'tee') THEN Carry
+          ELSE ${params.material}_carry 
+        END as material_carry,
+        ABS(Carry - $targetCarry) as carry_diff  -- Look at base carry for matching
+      FROM trajectories
+      WHERE 
+        BallSpeed BETWEEN $ballSpeedMin AND $ballSpeedMax
+        AND BackSpin BETWEEN $spinMin AND $spinMax
+        AND VLA BETWEEN $vlaMin AND $vlaMax
+        AND (
+          CASE 
+            WHEN '${params.material}' IN ('fairway', 'tee') THEN Carry
+            ELSE ${params.material}_carry 
+          END IS NOT NULL
+          AND CASE 
+            WHEN '${params.material}' IN ('fairway', 'tee') THEN Carry
+            ELSE ${params.material}_carry 
+          END > 0
+        )
+    )
+    SELECT 
+      BallSpeed,
+      VLA,
+      HLA,
+      BackSpin,
+      SpinAxis,
+      Carry,
+      Offline,
+      material_carry
+    FROM ValidShots
+    ORDER BY carry_diff ASC
+    LIMIT 1
+  `;
+
+    try {
+      const result = this.db.prepare(query).get({
+        $ballSpeedMin: params.ballSpeedMin,
+        $ballSpeedMax: params.ballSpeedMax,
+        $spinMin: params.spinMin,
+        $spinMax: params.spinMax,
+        $vlaMin: params.vlaMin,
+        $vlaMax: params.vlaMax,
+        $targetCarry: params.targetCarry,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Error in findTrajectoryInRange:", error);
+      return undefined;
+    }
+  }
+
   async findOptimalLength(ballSpeed: number, maxVLA?: number) {
     const params = {
       $ballSpeed: ballSpeed,

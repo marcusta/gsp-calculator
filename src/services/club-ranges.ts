@@ -1,3 +1,5 @@
+// club-ranges.ts
+
 export interface Club {
   name: string;
   spinMin: number;
@@ -15,7 +17,7 @@ export const clubs: Club[] = [
   // Driver
   {
     name: "Driver",
-    spinMin: 1500,
+    spinMin: 1400,
     spinMax: 3800,
     speedMin: 153,
     speedMax: 170,

@@ -2,6 +2,8 @@
 import { clubs, type Club } from "./club-ranges";
 import { TrajectoryService } from "./database.service";
 import {
+  getAltitudeModifier,
+  getElevationDistanceModifier,
   getRoughSpeedPenalty,
   getRoughSpinPenalty,
   getRoughVLAPenalty,
@@ -51,8 +53,10 @@ export class SuggestShotService {
 }
 
 export interface ShotSuggestion {
-  ballSpeed: number; // The "unpenalized" row's speed
-  spin: number; // The "unpenalized" row's spin
+  ballSpeed: number; // The penalized/modified speed
+  rawBallSpeed: number; // The original unmodified speed
+  spin: number; // The penalized/modified spin
+  rawSpin: number; // The original unmodified spin
   vla: number;
   rawCarry: number; // direct from DB
   estimatedCarry: number;
@@ -84,6 +88,17 @@ export async function suggestShot(
     return getRoughSpeedPenalty(material, speed, vla);
   };
 
+  const altitudeEffect = getAltitudeModifier(altitude);
+  const elevationEffect = getElevationDistanceModifier(
+    targetCarry,
+    elevation,
+    120,
+    5800,
+    18
+  );
+  const environmentModifiedCarry =
+    targetCarry * altitudeEffect + elevationEffect;
+
   // Helper to calculate modified carry range for a club
   const getModifiedCarryRange = (club: Club) => {
     const avgVLA = (club.vlaMax + club.vlaMin) / 2;
@@ -106,9 +121,12 @@ export async function suggestShot(
     const minAllowed = minCarry * 0.9;
     const maxAllowed = maxCarry * 1.1;
 
-    if (targetCarry >= minAllowed && targetCarry <= maxAllowed) {
+    if (
+      environmentModifiedCarry >= minAllowed &&
+      environmentModifiedCarry <= maxAllowed
+    ) {
       const rangeCenter = (minCarry + maxCarry) / 2;
-      const score = Math.abs(targetCarry - rangeCenter);
+      const score = Math.abs(environmentModifiedCarry - rangeCenter);
 
       if (score < bestScore) {
         bestScore = score;
@@ -167,7 +185,9 @@ export async function suggestShot(
 
         return {
           ballSpeed: adjustedSpeed,
+          rawBallSpeed: speed,
           spin: adjustedSpin,
+          rawSpin: avgSpin,
           vla: modifiedVLA,
           estimatedCarry: modifiedCarryData.Carry,
           rawCarry: rawCarryData.Carry,
