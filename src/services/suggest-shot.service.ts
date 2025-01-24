@@ -147,7 +147,6 @@ export async function suggestShot(
     const avgVLA = (club.vlaMax + club.vlaMin) / 2;
 
     // Determine number of speed samples based on range size
-    // Use fewer samples for clubs with smaller speed ranges
     const SPEED_RANGE_THRESHOLD = 5; // m/s
     const speeds =
       speedRange <= SPEED_RANGE_THRESHOLD
@@ -159,12 +158,17 @@ export async function suggestShot(
             club.speedMax,
           ];
 
-    const CARRY_THRESHOLD = 10; // meters - only get raw data if within this threshold
     const PERFECT_MATCH_THRESHOLD = 2.5; // meters - stop searching if we find a match this close
-    let bestResult: ShotSuggestion | null = null;
+    let bestModifiedResult: {
+      speed: number;
+      adjustedSpeed: number;
+      adjustedSpin: number;
+      modifiedVLA: number;
+      carry: number;
+    } | null = null;
     let bestDiff = Infinity;
 
-    // Try speeds sequentially instead of all at once
+    // Phase 1: Find best modified trajectory
     for (const speed of speeds) {
       const speedPenalty = getRoughSpeedPenalty(material, speed, avgVLA);
       const spinPenalty = getRoughSpinPenalty(material, speed, avgVLA);
@@ -193,67 +197,64 @@ export async function suggestShot(
 
       // Early exit if we found a very close match
       if (currentDiff <= PERFECT_MATCH_THRESHOLD) {
-        console.log("GET raw trajectory for", speed, avgSpin, avgVLA);
-        const rawCarryData = await trajectoryService.findClosestTrajectory(
+        bestModifiedResult = {
           speed,
-          avgSpin,
-          avgVLA
-        );
-
-        if (rawCarryData?.Carry) {
-          return {
-            ballSpeed: adjustedSpeed,
-            rawBallSpeed: speed,
-            spin: adjustedSpin,
-            rawSpin: avgSpin,
-            vla: modifiedVLA,
-            estimatedCarry: modifiedCarryData.Carry,
-            rawCarry: rawCarryData.Carry,
-            clubName: club.name,
-          };
-        }
+          adjustedSpeed,
+          adjustedSpin,
+          modifiedVLA,
+          carry: modifiedCarryData.Carry,
+        };
+        break;
       }
 
       // If this result is worse than our best by a significant margin, skip to next speed
-      if (bestResult && currentDiff > bestDiff * 1.5) continue;
-
-      // Only get raw carry if this might be our best result
-      let rawCarryData = null;
-      if (currentDiff <= CARRY_THRESHOLD) {
-        console.log("GET raw trajectory for", speed, avgSpin, avgVLA);
-        rawCarryData = await trajectoryService.findClosestTrajectory(
-          speed,
-          avgSpin,
-          avgVLA
-        );
-
-        if (!rawCarryData?.Carry) continue;
-      } else {
-        rawCarryData = modifiedCarryData;
-      }
-
-      const result = {
-        ballSpeed: adjustedSpeed,
-        rawBallSpeed: speed,
-        spin: adjustedSpin,
-        rawSpin: avgSpin,
-        vla: modifiedVLA,
-        estimatedCarry: modifiedCarryData.Carry,
-        rawCarry: rawCarryData.Carry,
-        clubName: club.name,
-      };
+      if (bestModifiedResult && currentDiff > bestDiff * 1.5) continue;
 
       if (currentDiff < bestDiff) {
         bestDiff = currentDiff;
-        bestResult = result;
+        bestModifiedResult = {
+          speed,
+          adjustedSpeed,
+          adjustedSpin,
+          modifiedVLA,
+          carry: modifiedCarryData.Carry,
+        };
       }
     }
 
-    if (!bestResult) {
+    if (!bestModifiedResult) {
       throw new Error(`No valid trajectories found for club ${club.name}`);
     }
 
-    return bestResult;
+    // Phase 2: Get raw trajectory data only for the best modified result
+    console.log(
+      "GET raw trajectory for",
+      bestModifiedResult.speed,
+      avgSpin,
+      avgVLA
+    );
+    const rawCarryData = await trajectoryService.findClosestTrajectory(
+      bestModifiedResult.speed,
+      avgSpin,
+      avgVLA
+    );
+
+    if (!rawCarryData?.Carry) {
+      throw new Error(
+        `Failed to get raw trajectory data for club ${club.name}`
+      );
+    }
+
+    return {
+      ballSpeed: bestModifiedResult.adjustedSpeed,
+      rawBallSpeed: bestModifiedResult.speed,
+      spin: bestModifiedResult.adjustedSpin,
+      rawSpin: avgSpin,
+      vla: bestModifiedResult.modifiedVLA,
+      estimatedCarry: bestModifiedResult.carry,
+      rawCarry: rawCarryData.Carry,
+      clubName: club.name,
+    };
   }
 
   // Try the initially selected club
