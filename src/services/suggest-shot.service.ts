@@ -146,94 +146,128 @@ export async function suggestShot(
     const avgSpin = (club.spinMax + club.spinMin) / 2;
     const avgVLA = (club.vlaMax + club.vlaMin) / 2;
 
-    // Try 5 different speeds
-    const speeds = [
-      club.speedMin,
-      club.speedMin + speedRange * 0.25,
-      club.speedMin + speedRange * 0.5,
-      club.speedMin + speedRange * 0.75,
-      club.speedMax,
-    ];
+    // Determine number of speed samples based on range size
+    // Use fewer samples for clubs with smaller speed ranges
+    const SPEED_RANGE_THRESHOLD = 5; // m/s
+    const speeds =
+      speedRange <= SPEED_RANGE_THRESHOLD
+        ? [club.speedMin, (club.speedMin + club.speedMax) / 2, club.speedMax]
+        : [
+            club.speedMin,
+            club.speedMin + speedRange * 0.33,
+            club.speedMin + speedRange * 0.66,
+            club.speedMax,
+          ];
 
     const CARRY_THRESHOLD = 10; // meters - only get raw data if within this threshold
+    const PERFECT_MATCH_THRESHOLD = 2.5; // meters - stop searching if we find a match this close
+    let bestResult: ShotSuggestion | null = null;
+    let bestDiff = Infinity;
 
-    const results = await Promise.all(
-      speeds.map(async (speed) => {
-        const speedPenalty = getRoughSpeedPenalty(material, speed, avgVLA);
-        const spinPenalty = getRoughSpinPenalty(material, speed, avgVLA);
-        const vlaPenalty = getRoughVLAPenalty(material, speed, avgVLA);
+    // Try speeds sequentially instead of all at once
+    for (const speed of speeds) {
+      const speedPenalty = getRoughSpeedPenalty(material, speed, avgVLA);
+      const spinPenalty = getRoughSpinPenalty(material, speed, avgVLA);
+      const vlaPenalty = getRoughVLAPenalty(material, speed, avgVLA);
 
-        const adjustedSpeed = speed * speedPenalty;
-        const adjustedSpin = avgSpin * spinPenalty;
-        const adjustedVLA = avgVLA * vlaPenalty;
-        const modifiedVLA = getModifiedLieVla(adjustedVLA, upDownLie);
+      const adjustedSpeed = speed * speedPenalty;
+      const adjustedSpin = avgSpin * spinPenalty;
+      const adjustedVLA = avgVLA * vlaPenalty;
+      const modifiedVLA = getModifiedLieVla(adjustedVLA, upDownLie);
 
-        // First get only the modified carry distance
-        const modifiedCarryData = await trajectoryService.findClosestTrajectory(
-          adjustedSpeed,
-          adjustedSpin,
-          modifiedVLA
+      console.log(
+        "GET modified trajectory for",
+        adjustedSpeed,
+        adjustedSpin,
+        modifiedVLA
+      );
+      const modifiedCarryData = await trajectoryService.findClosestTrajectory(
+        adjustedSpeed,
+        adjustedSpin,
+        modifiedVLA
+      );
+
+      if (!modifiedCarryData?.Carry) continue;
+
+      const currentDiff = Math.abs(modifiedCarryData.Carry - targetCarry);
+
+      // Early exit if we found a very close match
+      if (currentDiff <= PERFECT_MATCH_THRESHOLD) {
+        console.log("GET raw trajectory for", speed, avgSpin, avgVLA);
+        const rawCarryData = await trajectoryService.findClosestTrajectory(
+          speed,
+          avgSpin,
+          avgVLA
         );
 
-        // Early return if we don't have valid modified carry data
-        if (!modifiedCarryData?.Carry) {
-          return null;
+        if (rawCarryData?.Carry) {
+          return {
+            ballSpeed: adjustedSpeed,
+            rawBallSpeed: speed,
+            spin: adjustedSpin,
+            rawSpin: avgSpin,
+            vla: modifiedVLA,
+            estimatedCarry: modifiedCarryData.Carry,
+            rawCarry: rawCarryData.Carry,
+            clubName: club.name,
+          };
         }
+      }
 
-        // Only get raw carry if the modified carry is close enough to target
-        let rawCarryData = null;
-        if (
-          Math.abs(modifiedCarryData.Carry - targetCarry) <= CARRY_THRESHOLD
-        ) {
-          rawCarryData = await trajectoryService.findClosestTrajectory(
-            speed,
-            avgSpin,
-            avgVLA
-          );
+      // If this result is worse than our best by a significant margin, skip to next speed
+      if (bestResult && currentDiff > bestDiff * 1.5) continue;
 
-          // Skip if raw carry data is invalid
-          if (!rawCarryData?.Carry) {
-            return null;
-          }
-        } else {
-          // If not close enough, use modified carry as raw carry
-          // This is an approximation but acceptable for shots we won't use
-          rawCarryData = modifiedCarryData;
-        }
+      // Only get raw carry if this might be our best result
+      let rawCarryData = null;
+      if (currentDiff <= CARRY_THRESHOLD) {
+        console.log("GET raw trajectory for", speed, avgSpin, avgVLA);
+        rawCarryData = await trajectoryService.findClosestTrajectory(
+          speed,
+          avgSpin,
+          avgVLA
+        );
 
-        return {
-          ballSpeed: adjustedSpeed,
-          rawBallSpeed: speed,
-          spin: adjustedSpin,
-          rawSpin: avgSpin,
-          vla: modifiedVLA,
-          estimatedCarry: modifiedCarryData.Carry,
-          rawCarry: rawCarryData.Carry,
-          clubName: club.name,
-        };
-      })
-    ).then((results) => results.filter((r): r is ShotSuggestion => r !== null));
+        if (!rawCarryData?.Carry) continue;
+      } else {
+        rawCarryData = modifiedCarryData;
+      }
 
-    // Find the result closest to target carry
-    return results.reduce((best, current) => {
-      const currentDiff = Math.abs(current.estimatedCarry! - targetCarry);
-      const bestDiff = Math.abs(best.estimatedCarry! - targetCarry);
-      return currentDiff < bestDiff ? current : best;
-    });
+      const result = {
+        ballSpeed: adjustedSpeed,
+        rawBallSpeed: speed,
+        spin: adjustedSpin,
+        rawSpin: avgSpin,
+        vla: modifiedVLA,
+        estimatedCarry: modifiedCarryData.Carry,
+        rawCarry: rawCarryData.Carry,
+        clubName: club.name,
+      };
+
+      if (currentDiff < bestDiff) {
+        bestDiff = currentDiff;
+        bestResult = result;
+      }
+    }
+
+    if (!bestResult) {
+      throw new Error(`No valid trajectories found for club ${club.name}`);
+    }
+
+    return bestResult;
   }
 
   // Try the initially selected club
   let bestResult = await tryClub(bestClubIndex);
   const ACCEPTABLE_DIFF = 5; // 5 meters difference is acceptable
 
-  // If initial result isn't close enough, try one adjacent club
-  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF) {
+  // Only try adjacent club if current result is significantly off
+  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF * 2) {
     if (bestResult.estimatedCarry < targetCarry && bestClubIndex > 0) {
       // Try one stronger club
       const strongerResult = await tryClub(bestClubIndex - 1);
       if (
         Math.abs(strongerResult.estimatedCarry - targetCarry) <
-        Math.abs(bestResult.estimatedCarry - targetCarry)
+        Math.abs(bestResult.estimatedCarry - targetCarry) * 0.8 // Only use if significantly better
       ) {
         bestResult = strongerResult;
       }
@@ -245,7 +279,7 @@ export async function suggestShot(
       const weakerResult = await tryClub(bestClubIndex + 1);
       if (
         Math.abs(weakerResult.estimatedCarry - targetCarry) <
-        Math.abs(bestResult.estimatedCarry - targetCarry)
+        Math.abs(bestResult.estimatedCarry - targetCarry) * 0.8 // Only use if significantly better
       ) {
         bestResult = weakerResult;
       }
