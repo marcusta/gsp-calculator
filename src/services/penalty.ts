@@ -186,8 +186,6 @@ export function getRoughSpeedPenaltyForSpeed(
   materialName: string,
   speed: number
 ): number {
-  console.log("getRoughSpeedPenaltyForSpeed", materialName, speed);
-
   const { offset1 } = materialsTable[materialName];
   // Constrain speed to [0, 150].
   speed = Math.min(Math.max(speed, 0), 150);

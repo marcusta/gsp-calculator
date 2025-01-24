@@ -155,6 +155,8 @@ export async function suggestShot(
       club.speedMax,
     ];
 
+    const CARRY_THRESHOLD = 10; // meters - only get raw data if within this threshold
+
     const results = await Promise.all(
       speeds.map(async (speed) => {
         const speedPenalty = getRoughSpeedPenalty(material, speed, avgVLA);
@@ -166,21 +168,37 @@ export async function suggestShot(
         const adjustedVLA = avgVLA * vlaPenalty;
         const modifiedVLA = getModifiedLieVla(adjustedVLA, upDownLie);
 
-        // Get both raw and modified carry distances
-        const rawCarryData = await trajectoryService.findClosestTrajectory(
-          speed,
-          avgSpin,
-          avgVLA
-        );
+        // First get only the modified carry distance
         const modifiedCarryData = await trajectoryService.findClosestTrajectory(
           adjustedSpeed,
           adjustedSpin,
           modifiedVLA
         );
 
-        // Early return if we don't have valid carry data
-        if (!rawCarryData?.Carry || !modifiedCarryData?.Carry) {
+        // Early return if we don't have valid modified carry data
+        if (!modifiedCarryData?.Carry) {
           return null;
+        }
+
+        // Only get raw carry if the modified carry is close enough to target
+        let rawCarryData = null;
+        if (
+          Math.abs(modifiedCarryData.Carry - targetCarry) <= CARRY_THRESHOLD
+        ) {
+          rawCarryData = await trajectoryService.findClosestTrajectory(
+            speed,
+            avgSpin,
+            avgVLA
+          );
+
+          // Skip if raw carry data is invalid
+          if (!rawCarryData?.Carry) {
+            return null;
+          }
+        } else {
+          // If not close enough, use modified carry as raw carry
+          // This is an approximation but acceptable for shots we won't use
+          rawCarryData = modifiedCarryData;
         }
 
         return {

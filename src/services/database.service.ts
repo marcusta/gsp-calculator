@@ -83,6 +83,15 @@ export class TrajectoryService {
         (result.above_speed - result.below_speed)
     );
 
+    console.log(
+      "Finding closest trajectory for",
+      ballSpeed,
+      spin,
+      vla,
+      " result: ",
+      interpolatedCarry
+    );
+
     return {
       BallSpeed: ballSpeed, // Use requested ball speed
       VLA: result.VLA,
