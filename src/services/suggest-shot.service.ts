@@ -1,6 +1,7 @@
 // services/suggestShot.service.ts
 import { clubs, type Club } from "./club-ranges";
 import { TrajectoryService } from "./database.service";
+import { calculateOfflineDeviation } from "./lie-calculation";
 import {
   getAltitudeModifier,
   getElevationDistanceModifier,
@@ -61,6 +62,7 @@ export interface ShotSuggestion {
   rawCarry: number; // direct from DB
   estimatedCarry: number;
   clubName: string;
+  offlineAimAdjustment: number; // Positive means aim right, negative means aim left (meters)
 }
 
 /**
@@ -253,6 +255,7 @@ export async function suggestShot(
       ),
       rawCarry: rawCarryData.Carry,
       clubName: club.name,
+      offlineAimAdjustment: 0, // Placeholder, actual calculation will be done later
     };
   }
 
@@ -301,7 +304,20 @@ export async function suggestShot(
     };
   }
 
-  return bestResult;
+  // Calculate offline deviation based on the right/left lie
+  // Negate the value since we want to aim in the opposite direction of the deviation
+  const offlineAimAdjustment = -calculateOfflineDeviation(
+    bestResult.vla,
+    rightLeftLie,
+    bestResult.estimatedCarry
+  );
+
+  console.log("offlineAimAdjustment", offlineAimAdjustment);
+
+  return {
+    ...bestResult,
+    offlineAimAdjustment,
+  };
 }
 
 function calculateEnvironmentModifiedCarry(
