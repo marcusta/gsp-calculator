@@ -81,12 +81,20 @@ app.post("/suggestShot", async (c) => {
   } = body;
 
   console.log("======================== new request =========================");
-  console.log("targetCarry", targetCarry);
-  console.log("material", material);
-  console.log("upDownLie", upDownLie);
-  console.log("rightLeftLie", rightLeftLie);
-  console.log("elevation", elevation);
-  console.log("altitude", altitude);
+  console.log(
+    "targetCarry",
+    targetCarry,
+    "material",
+    material,
+    "upDownLie",
+    upDownLie,
+    "rightLeftLie",
+    rightLeftLie,
+    "elevation",
+    elevation,
+    "altitude",
+    altitude
+  );
 
   if (typeof targetCarry !== "number") {
     return c.json({ error: "Missing or invalid targetCarry " }, 400);

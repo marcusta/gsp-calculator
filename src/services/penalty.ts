@@ -345,7 +345,8 @@ export function getRoughVLAPenaltyForSpeed(
  */
 export function getAltitudeModifier(altitude: number): number {
   // 1% increase per 500 feet
-  const rawAltitudeScaling = 1 + (altitude / 500) * 0.0075;
+  // const rawAltitudeScaling = 1 + (altitude / 500) * 0.0075;
+  const rawAltitudeScaling = 1 + (altitude / 500) * 0.01;
   return rawAltitudeScaling;
 }
 
@@ -528,7 +529,7 @@ export function getElevationDistanceModifier(
         spin <= lt.spinRange[1]
     ) || launchTypes[4];
 
-  console.log("launchType", launchType);
+  // console.log("launchType", launchType);
 
   // Determine which elevation range we're in
   let multiplier: number;
@@ -548,13 +549,7 @@ export function getElevationDistanceModifier(
     multiplier = launchType.elevationMultipliers.uphillSteep;
   }
 
-  // Scale the effect based on target distance
   const distanceScaling = getDistanceScalingFactorForElevation(targetDistance);
 
-  console.log("distanceScaling", distanceScaling);
-  console.log("multiplier", multiplier);
-  console.log("elevationDiff", elevationDiff);
-
-  // Apply both multipliers to the elevation difference
   return -elevationDiff * multiplier * distanceScaling;
 }

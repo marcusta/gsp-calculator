@@ -88,16 +88,8 @@ export async function suggestShot(
     return getRoughSpeedPenalty(material, speed, vla);
   };
 
-  const altitudeEffect = getAltitudeModifier(altitude);
-  const elevationEffect = getElevationDistanceModifier(
-    targetCarry,
-    elevation,
-    120,
-    5800,
-    18
-  );
-  const environmentModifiedCarry =
-    targetCarry * altitudeEffect + elevationEffect;
+  const environmentModifiedCarryForFindingClub =
+    calculateNeededEnvironmentModifiedCarry(targetCarry, elevation, altitude);
 
   // Helper to calculate modified carry range for a club
   const getModifiedCarryRange = (club: Club) => {
@@ -122,11 +114,13 @@ export async function suggestShot(
     const maxAllowed = maxCarry * 1.1;
 
     if (
-      environmentModifiedCarry >= minAllowed &&
-      environmentModifiedCarry <= maxAllowed
+      environmentModifiedCarryForFindingClub >= minAllowed &&
+      environmentModifiedCarryForFindingClub <= maxAllowed
     ) {
       const rangeCenter = (minCarry + maxCarry) / 2;
-      const score = Math.abs(environmentModifiedCarry - rangeCenter);
+      const score = Math.abs(
+        environmentModifiedCarryForFindingClub - rangeCenter
+      );
 
       if (score < bestScore) {
         bestScore = score;
@@ -168,7 +162,6 @@ export async function suggestShot(
     } | null = null;
     let bestDiff = Infinity;
 
-    // Phase 1: Find best modified trajectory
     for (const speed of speeds) {
       const speedPenalty = getRoughSpeedPenalty(material, speed, avgVLA);
       const spinPenalty = getRoughSpinPenalty(material, speed, avgVLA);
@@ -179,12 +172,6 @@ export async function suggestShot(
       const adjustedVLA = avgVLA * vlaPenalty;
       const modifiedVLA = getModifiedLieVla(adjustedVLA, upDownLie);
 
-      console.log(
-        "GET modified trajectory for",
-        adjustedSpeed,
-        adjustedSpin,
-        modifiedVLA
-      );
       const modifiedCarryData = await trajectoryService.findClosestTrajectory(
         adjustedSpeed,
         adjustedSpin,
@@ -193,7 +180,21 @@ export async function suggestShot(
 
       if (!modifiedCarryData?.Carry) continue;
 
-      const currentDiff = Math.abs(modifiedCarryData.Carry - targetCarry);
+      const environmentModifiedCarryForClub =
+        calculateNeededEnvironmentModifiedCarry(
+          targetCarry,
+          elevation,
+          altitude,
+          { speed: adjustedSpeed, spin: adjustedSpin, vla: modifiedVLA }
+        );
+
+      console.log(
+        "===> environmentModifiedCarryForClub",
+        environmentModifiedCarryForClub
+      );
+      const currentDiff = Math.abs(
+        modifiedCarryData.Carry - environmentModifiedCarryForClub
+      );
 
       // Early exit if we found a very close match
       if (currentDiff <= PERFECT_MATCH_THRESHOLD) {
@@ -226,13 +227,6 @@ export async function suggestShot(
       throw new Error(`No valid trajectories found for club ${club.name}`);
     }
 
-    // Phase 2: Get raw trajectory data only for the best modified result
-    console.log(
-      "GET raw trajectory for",
-      bestModifiedResult.speed,
-      avgSpin,
-      avgVLA
-    );
     const rawCarryData = await trajectoryService.findClosestTrajectory(
       bestModifiedResult.speed,
       avgSpin,
@@ -251,7 +245,12 @@ export async function suggestShot(
       spin: bestModifiedResult.adjustedSpin,
       rawSpin: avgSpin,
       vla: bestModifiedResult.modifiedVLA,
-      estimatedCarry: bestModifiedResult.carry,
+      estimatedCarry: calculateEnvironmentModifiedCarry(
+        bestModifiedResult.carry,
+        elevation,
+        altitude,
+        club
+      ),
       rawCarry: rawCarryData.Carry,
       clubName: club.name,
     };
@@ -262,9 +261,10 @@ export async function suggestShot(
   const ACCEPTABLE_DIFF = 5; // 5 meters difference is acceptable
 
   // Only try adjacent club if current result is significantly off
-  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF * 2) {
+  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF) {
     if (bestResult.estimatedCarry < targetCarry && bestClubIndex > 0) {
       // Try one stronger club
+      console.log("TRY one stronger club");
       const strongerResult = await tryClub(bestClubIndex - 1);
       if (
         Math.abs(strongerResult.estimatedCarry - targetCarry) <
@@ -287,5 +287,85 @@ export async function suggestShot(
     }
   }
 
+  // Add final adjustment to minimize carry difference
+  const carryDiff = targetCarry - bestResult.estimatedCarry;
+  if (Math.abs(carryDiff) > 1) {
+    // Only adjust if difference is meaningful
+    const speedRatio = bestResult.ballSpeed / bestResult.rawBallSpeed;
+    const rawCarryAdjustment = carryDiff / speedRatio;
+
+    bestResult = {
+      ...bestResult,
+      rawCarry: bestResult.rawCarry + rawCarryAdjustment,
+      estimatedCarry: targetCarry,
+    };
+  }
+
   return bestResult;
+}
+
+function calculateEnvironmentModifiedCarry(
+  carry: number,
+  elevation: number,
+  altitude: number,
+  club?: Club | { spin: number; vla: number; speed: number }
+) {
+  const { ballSpeed, spin, vla } = getBallDataFromClub(club);
+  const altitudeEffect = getAltitudeModifier(altitude);
+  const elevationEffect = getElevationDistanceModifier(
+    carry,
+    elevation,
+    ballSpeed,
+    spin,
+    vla
+  );
+  const result = (carry + elevationEffect) * altitudeEffect;
+  console.log(
+    "===> environmentModifiedCarry",
+    result,
+    "input carry",
+    carry,
+    "elevation",
+    elevation,
+    "altitude",
+    altitude
+  );
+  return result;
+}
+
+function calculateNeededEnvironmentModifiedCarry(
+  carry: number,
+  elevation: number,
+  altitude: number,
+  club?: Club | { spin: number; vla: number; speed: number }
+) {
+  const { ballSpeed, spin, vla } = getBallDataFromClub(club);
+  const altitudeEffect = getAltitudeModifier(altitude);
+  const elevationEffect = getElevationDistanceModifier(
+    carry,
+    elevation,
+    ballSpeed,
+    spin,
+    vla
+  );
+  const result = (carry - elevationEffect) / altitudeEffect;
+  return result;
+}
+
+function getBallDataFromClub(
+  club?: Club | { spin: number; vla: number; speed: number }
+) {
+  let ballSpeed = 120;
+  let spin = 5800;
+  let vla = 18;
+  if (club && "speedMin" in club) {
+    ballSpeed = club.speedMin;
+    spin = (club.spinMax + club.spinMin) / 2;
+    vla = (club.vlaMax + club.vlaMin) / 2;
+  } else if (club) {
+    ballSpeed = club.speed;
+    spin = club.spin;
+    vla = club.vla;
+  }
+  return { ballSpeed, spin, vla };
 }
