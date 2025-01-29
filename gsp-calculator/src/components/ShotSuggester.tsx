@@ -9,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PhyMatList } from "@/material";
 import { Info } from "lucide-react";
 import {
   Tooltip,
@@ -23,33 +22,32 @@ import {
   convertMetersToYards,
   convertYardsToMeters,
 } from "@/types/units";
-import { suggestShot } from "@/trajectory";
-import { getRoughSpeedPenalty } from "@/penalty";
-import { getRoughSpinPenalty, getRoughVLAPenalty } from "@/penalty";
-import { calculateOfflineDeviation } from "@/lie-calculation";
-import { formatMaterialNameForUI } from "../material";
-import { getAltitudeModifier } from "@/penalty";
-import { getElevationDistanceModifier } from "@/penalty";
+import { suggestShot } from "@/api";
 
 interface ShotSuggestion {
   club: string;
-  power: number;
   estimatedCarry: number;
   rawCarry: number;
-  ballSpeed: number;
-  speedModifier: number;
-  spin: number;
-  spinModifier: number;
-  launchAngle: number;
-  vlaModifier: number;
   offlineDeviation: number;
-  altitudeModifier: number;
-  elevationModifier: number;
 }
+
+// Add mapping between indices and material names
+const validMaterials = [
+  { name: "fairway", title: "Fairway" },
+  { name: "rough", title: "Rough" },
+  { name: "sand", title: "Sand" },
+  { name: "deeprough", title: "Deep rough" },
+  { name: "semirough", title: "Semi rough" },
+  { name: "tee", title: "Tee" },
+  { name: "pinestraw", title: "Pine straw" },
+  { name: "concrete", title: "Concrete" },
+  { name: "earth", title: "Earth" },
+  { name: "leaves", title: "Leaves" },
+  { name: "stone", title: "Stone" },
+];
 
 export function ShotSuggester() {
   const [targetCarry, setTargetCarry] = useState<string>("");
-  const [materialIndex, setMaterialIndex] = useState<number>(1);
   const [suggestions, setSuggestions] = useState<ShotSuggestion[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,19 +56,12 @@ export function ShotSuggester() {
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
   const [altitude, setAltitude] = useState<string>("0");
   const [elevationDiff, setElevationDiff] = useState<string>("0");
-
-  // Filter PhyMatList to only include materials that have entries in the penalty tables
-  const validMaterialIndices = [18, 2, 1, 3, 4, 6, 11, 12, 13, 16, 17];
-  const validMaterials = validMaterialIndices.map((index) => ({
-    index,
-    name: PhyMatList[index],
-  }));
+  const [material, setMaterial] = useState<string>("");
 
   const handleCalculate = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Convert target distance and elevation difference
       const targetDistance =
         unit === "yards"
           ? convertYardsToMeters(parseFloat(targetCarry))
@@ -85,84 +76,21 @@ export function ShotSuggester() {
         throw new Error("Please enter a valid target distance");
       }
 
-      // Get initial shot suggestion without modifiers to get approximate ball parameters
-      const initialSuggestion = await suggestShot(
-        targetDistance,
-        materialIndex,
-        parseFloat(upDownLie) || 0
-      );
-
-      // Get the material modifiers using initial parameters
-      const speedModifier = getRoughSpeedPenalty(
-        materialIndex,
-        initialSuggestion.ballSpeed,
-        initialSuggestion.vla
-      );
-      const spinModifier = getRoughSpinPenalty(
-        materialIndex,
-        initialSuggestion.ballSpeed,
-        initialSuggestion.vla
-      );
-      const vlaModifier = getRoughVLAPenalty(
-        materialIndex,
-        initialSuggestion.ballSpeed,
-        initialSuggestion.vla
-      );
-
-      // Calculate actual ball parameters after material effects
-      const actualBallSpeed = initialSuggestion.ballSpeed / speedModifier;
-      const actualSpin = initialSuggestion.spin / spinModifier;
-      const actualVLA = initialSuggestion.vla / vlaModifier;
-
-      // Calculate elevation effect using actual ball parameters
-      const elevationModifier = getElevationDistanceModifier(
-        targetDistance,
-        elevationDiffMeters,
-        actualBallSpeed,
-        actualSpin,
-        actualVLA
-      );
-
-      // Apply altitude modifier
-      const altitudeModifier = getAltitudeModifier(parseFloat(altitude) || 0);
-
-      // Adjust target distance for elevation and altitude before club selection
-      const adjustedTargetDistance =
-        (targetDistance - elevationModifier) / altitudeModifier;
-
-      // Get final shot suggestion with adjusted target distance
       const suggestion = await suggestShot(
-        adjustedTargetDistance,
-        materialIndex,
-        parseFloat(upDownLie) || 0
-      );
-
-      // Calculate offline deviation
-      const offlineDeviation = calculateOfflineDeviation(
-        actualVLA,
+        targetDistance,
+        material,
+        parseFloat(upDownLie) || 0,
         parseFloat(rightLeftLie) || 0,
-        suggestion.estimatedCarry
+        elevationDiffMeters,
+        parseFloat(altitude) || 0
       );
-
-      // Calculate final carry with all modifiers
-      const finalCarry =
-        suggestion.estimatedCarry * altitudeModifier + elevationModifier;
 
       setSuggestions([
         {
           club: suggestion.clubName,
-          power: suggestion.powerPercentage,
-          estimatedCarry: finalCarry,
+          estimatedCarry: suggestion.estimatedCarry,
           rawCarry: suggestion.rawCarry,
-          ballSpeed: actualBallSpeed,
-          speedModifier,
-          spin: actualSpin,
-          spinModifier,
-          launchAngle: actualVLA,
-          vlaModifier,
-          offlineDeviation,
-          altitudeModifier,
-          elevationModifier,
+          offlineDeviation: suggestion.offlineAimAdjustment,
         },
       ]);
     } catch (err) {
@@ -203,16 +131,16 @@ export function ShotSuggester() {
           <div className="space-y-2">
             <Label htmlFor="material">Lie/Material</Label>
             <Select
-              value={materialIndex.toString()}
-              onValueChange={(value) => setMaterialIndex(Number(value))}
+              value={material}
+              onValueChange={(value) => setMaterial(value)}
             >
               <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select material" />
               </SelectTrigger>
               <SelectContent>
-                {validMaterials.map(({ index, name }) => (
-                  <SelectItem key={index} value={index.toString()}>
-                    {formatMaterialNameForUI(name)}
+                {validMaterials.map(({ name, title }) => (
+                  <SelectItem key={name} value={name}>
+                    {title}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -329,70 +257,34 @@ export function ShotSuggester() {
 
         {suggestions && (
           <div className="mt-4 space-y-4">
-            <h3 className="font-semibold">Suggested Shots:</h3>
-            <div className="grid gap-4 md:grid-cols-2">
+            <h3 className="font-semibold">Suggested Shot:</h3>
+            <div className="grid gap-4">
               {suggestions.map((suggestion, index) => (
                 <div key={index} className="border p-4 rounded-lg">
-                  <h4 className="font-semibold mb-2">{suggestion.club}</h4>
-                  <p>Power: {suggestion.power.toFixed(1)}%</p>
-                  <p>
-                    Ball Speed: {suggestion.ballSpeed.toFixed(1)} mph
-                    <span className="text-muted-foreground ml-2">
-                      (×{suggestion.speedModifier.toFixed(3)})
-                    </span>
+                  <p className="text-lg font-semibold mb-2">
+                    Club: {suggestion.club}
                   </p>
                   <p>
-                    Spin Rate: {suggestion.spin.toFixed(0)} rpm
-                    <span className="text-muted-foreground ml-2">
-                      (×{suggestion.spinModifier.toFixed(3)})
-                    </span>
-                  </p>
-                  <p>
-                    Launch Angle: {suggestion.launchAngle.toFixed(1)}°
-                    <span className="text-muted-foreground ml-2">
-                      (×{suggestion.vlaModifier.toFixed(3)})
-                    </span>
-                  </p>
-                  <p>
-                    Raw Carry:{" "}
+                    Plays as:{" "}
                     {(unit === "yards"
                       ? convertMetersToYards(suggestion.rawCarry)
                       : suggestion.rawCarry
                     ).toFixed(1)}{" "}
                     {unit}
                   </p>
-                  <p>
-                    Estimated Carry:{" "}
-                    {(unit === "yards"
-                      ? convertMetersToYards(suggestion.estimatedCarry)
-                      : suggestion.estimatedCarry
-                    ).toFixed(1)}{" "}
-                    {unit}
-                  </p>
-                  <p>
-                    Aim{" "}
-                    {(unit === "yards"
-                      ? convertMetersToYards(
-                          Math.abs(suggestion.offlineDeviation)
-                        )
-                      : Math.abs(suggestion.offlineDeviation)
-                    ).toFixed(1)}{" "}
-                    {unit} {suggestion.offlineDeviation > 0 ? "left" : "right"}
-                    {suggestion.offlineDeviation === 0 ? "straight" : ""}
-                  </p>
-                  <p>
-                    Altitude Effect: +
-                    {((suggestion.altitudeModifier - 1) * 100).toFixed(1)}%
-                  </p>
-                  <p>
-                    Elevation Effect:{" "}
-                    {(unit === "yards"
-                      ? convertMetersToYards(suggestion.elevationModifier)
-                      : suggestion.elevationModifier
-                    ).toFixed(1)}{" "}
-                    {unit}{" "}
-                    {suggestion.elevationModifier > 0 ? "shorter" : "longer"}
-                  </p>
+                  {suggestion.offlineDeviation !== 0 && (
+                    <p>
+                      Aim{" "}
+                      {(unit === "yards"
+                        ? convertMetersToYards(
+                            Math.abs(suggestion.offlineDeviation)
+                          )
+                        : Math.abs(suggestion.offlineDeviation)
+                      ).toFixed(1)}{" "}
+                      {unit}{" "}
+                      {suggestion.offlineDeviation < 0 ? "left" : "right"}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

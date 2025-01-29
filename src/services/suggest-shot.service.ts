@@ -155,58 +155,29 @@ export async function suggestShot(
           ];
 
     const PERFECT_MATCH_THRESHOLD = 2.5; // meters - stop searching if we find a match this close
-    let bestModifiedResult: {
-      speed: number;
-      adjustedSpeed: number;
-      adjustedSpin: number;
-      modifiedVLA: number;
-      carry: number;
-    } | null = null;
+    let bestModifiedResult: ShotResult | null = null;
     let bestDiff = Infinity;
 
     for (const speed of speeds) {
-      const speedPenalty = getRoughSpeedPenalty(material, speed, avgVLA);
-      const spinPenalty = getRoughSpinPenalty(material, speed, avgVLA);
-      const vlaPenalty = getRoughVLAPenalty(material, speed, avgVLA);
+      const request: ShotRequest = {
+        material,
+        speed,
+        spin: avgSpin,
+        vla: avgVLA,
+        upDownLie,
+        rightLeftLie,
+        elevation,
+        altitude,
+      };
+      const result = await calculateTrajectory(request, trajectoryService);
 
-      const adjustedSpeed = speed * speedPenalty;
-      const adjustedSpin = avgSpin * spinPenalty;
-      const adjustedVLA = avgVLA * vlaPenalty;
-      const modifiedVLA = getModifiedLieVla(adjustedVLA, upDownLie);
+      if (!result) continue;
 
-      const modifiedCarryData = await trajectoryService.findClosestTrajectory(
-        adjustedSpeed,
-        adjustedSpin,
-        modifiedVLA
-      );
-
-      if (!modifiedCarryData?.Carry) continue;
-
-      const environmentModifiedCarryForClub =
-        calculateNeededEnvironmentModifiedCarry(
-          targetCarry,
-          elevation,
-          altitude,
-          { speed: adjustedSpeed, spin: adjustedSpin, vla: modifiedVLA }
-        );
-
-      console.log(
-        "===> environmentModifiedCarryForClub",
-        environmentModifiedCarryForClub
-      );
-      const currentDiff = Math.abs(
-        modifiedCarryData.Carry - environmentModifiedCarryForClub
-      );
+      const currentDiff = Math.abs(targetCarry - result.envCarry);
 
       // Early exit if we found a very close match
       if (currentDiff <= PERFECT_MATCH_THRESHOLD) {
-        bestModifiedResult = {
-          speed,
-          adjustedSpeed,
-          adjustedSpin,
-          modifiedVLA,
-          carry: modifiedCarryData.Carry,
-        };
+        bestModifiedResult = result;
         break;
       }
 
@@ -215,13 +186,7 @@ export async function suggestShot(
 
       if (currentDiff < bestDiff) {
         bestDiff = currentDiff;
-        bestModifiedResult = {
-          speed,
-          adjustedSpeed,
-          adjustedSpin,
-          modifiedVLA,
-          carry: modifiedCarryData.Carry,
-        };
+        bestModifiedResult = result;
       }
     }
 
@@ -246,16 +211,11 @@ export async function suggestShot(
       rawBallSpeed: bestModifiedResult.speed,
       spin: bestModifiedResult.adjustedSpin,
       rawSpin: avgSpin,
-      vla: bestModifiedResult.modifiedVLA,
-      estimatedCarry: calculateEnvironmentModifiedCarry(
-        bestModifiedResult.carry,
-        elevation,
-        altitude,
-        club
-      ),
+      vla: bestModifiedResult.adjustedVLA,
+      estimatedCarry: bestModifiedResult.envCarry,
       rawCarry: rawCarryData.Carry,
       clubName: club.name,
-      offlineAimAdjustment: 0, // Placeholder, actual calculation will be done later
+      offlineAimAdjustment: -bestModifiedResult.offlineDeviation,
     };
   }
 
@@ -290,10 +250,8 @@ export async function suggestShot(
     }
   }
 
-  // Add final adjustment to minimize carry difference
   const carryDiff = targetCarry - bestResult.estimatedCarry;
   if (Math.abs(carryDiff) > 1) {
-    // Only adjust if difference is meaningful
     const speedRatio = bestResult.ballSpeed / bestResult.rawBallSpeed;
     const rawCarryAdjustment = carryDiff / speedRatio;
 
@@ -304,19 +262,8 @@ export async function suggestShot(
     };
   }
 
-  // Calculate offline deviation based on the right/left lie
-  // Negate the value since we want to aim in the opposite direction of the deviation
-  const offlineAimAdjustment = -calculateOfflineDeviation(
-    bestResult.vla,
-    rightLeftLie,
-    bestResult.estimatedCarry
-  );
-
-  console.log("offlineAimAdjustment", offlineAimAdjustment);
-
   return {
     ...bestResult,
-    offlineAimAdjustment,
   };
 }
 
@@ -384,4 +331,88 @@ function getBallDataFromClub(
     vla = club.vla;
   }
   return { ballSpeed, spin, vla };
+}
+
+export interface ShotRequest {
+  material: string;
+  speed: number;
+  vla: number;
+  spin: number;
+  upDownLie: number;
+  rightLeftLie: number;
+  elevation: number;
+  altitude: number;
+}
+
+export interface ShotResult extends ShotRequest {
+  adjustedSpeed: number;
+  adjustedSpin: number;
+  adjustedVLA: number;
+  carry: number;
+  envCarry: number;
+  offlineDeviation: number;
+}
+
+async function calculateTrajectory(
+  request: ShotRequest,
+  trajectoryService: TrajectoryService
+): Promise<ShotResult | null> {
+  const speedPenalty = getRoughSpeedPenalty(
+    request.material,
+    request.speed,
+    request.vla
+  );
+  const spinPenalty = getRoughSpinPenalty(
+    request.material,
+    request.speed,
+    request.vla
+  );
+  const vlaPenalty = getRoughVLAPenalty(
+    request.material,
+    request.speed,
+    request.vla
+  );
+
+  const adjustedSpeed = request.speed * speedPenalty;
+  const adjustedSpin = request.spin * spinPenalty;
+  const adjustedVLA = request.vla * vlaPenalty;
+  const modifiedVLA = getModifiedLieVla(adjustedVLA, request.upDownLie);
+
+  const modifiedCarryData = await trajectoryService.findClosestTrajectory(
+    adjustedSpeed,
+    adjustedSpin,
+    modifiedVLA
+  );
+
+  if (!modifiedCarryData?.Carry) {
+    return null;
+  }
+
+  const environmentModifiedCarryForClub =
+    calculateNeededEnvironmentModifiedCarry(
+      modifiedCarryData.Carry,
+      request.elevation,
+      request.altitude,
+      {
+        speed: adjustedSpeed,
+        spin: adjustedSpin,
+        vla: modifiedVLA,
+      }
+    );
+
+  const offlineDeviation = calculateOfflineDeviation(
+    modifiedVLA,
+    request.rightLeftLie,
+    environmentModifiedCarryForClub
+  );
+
+  return {
+    ...request,
+    adjustedSpeed,
+    adjustedSpin,
+    adjustedVLA: modifiedVLA,
+    carry: modifiedCarryData.Carry,
+    envCarry: environmentModifiedCarryForClub,
+    offlineDeviation,
+  };
 }
