@@ -3,13 +3,14 @@ import { Hono, type Context } from "hono";
 import { TrajectoryService } from "./services/database.service";
 import { ShotCalculator } from "./services/shot-calculator";
 import { SuggestShotService } from "./services/suggest-shot.service";
+import type { SuggestShotRequest } from "./types";
 
 const app = new Hono();
 const trajectoryService = new TrajectoryService();
 const suggestShotService = new SuggestShotService(trajectoryService);
 const shotCalculator = new ShotCalculator(trajectoryService);
 
-app.get("/materials", async (c) => {
+app.get("/api/materials", async (c) => {
   return c.json([
     { name: "semirough", title: "Semi Rough" },
     { name: "fairway", title: "Fairway" },
@@ -35,78 +36,43 @@ interface CalculateCarryRequest {
   elevation?: number;
   altitude?: number;
 }
-app.post("/calculate-carry", async (c) => {
-  const body: CalculateCarryRequest = await c.req.json();
-  const {
-    ballSpeed,
-    spin,
-    vla,
-    upDownLie,
-    rightLeftLie,
-    material,
-    elevation,
-    altitude,
-  } = body;
+app.post("/api/calculate-carry", async (c) => {
+  console.log(
+    "======================== new calculate-carry request ========================="
+  );
+  const request: CalculateCarryRequest = await c.req.json();
   const result = await shotCalculator.calculateCarry(
-    ballSpeed,
-    spin,
-    vla,
-    material,
-    upDownLie,
-    rightLeftLie,
-    elevation,
-    altitude
+    request.ballSpeed,
+    request.spin,
+    request.vla,
+    request.material,
+    request.upDownLie,
+    request.rightLeftLie,
+    request.elevation,
+    request.altitude
   );
   return c.json(result);
 });
 
-interface SuggestShotRequest {
-  targetCarry: number;
-  material: string;
-  upDownLie?: number;
-  rightLeftLie?: number;
-  elevation?: number;
-  altitude?: number;
-}
-app.post("/suggestShot", async (c) => {
-  let body: SuggestShotRequest = await c.req.json();
+app.post("/api/suggestShot", async (c) => {
+  const request: SuggestShotRequest = await c.req.json();
 
-  const {
-    targetCarry,
-    material,
-    upDownLie,
-    rightLeftLie,
-    elevation,
-    altitude,
-  } = body;
-
-  console.log("======================== new request =========================");
   console.log(
-    "targetCarry",
-    targetCarry,
-    "material",
-    material,
-    "upDownLie",
-    upDownLie,
-    "rightLeftLie",
-    rightLeftLie,
-    "elevation",
-    elevation,
-    "altitude",
-    altitude
+    "======================== new suggestShot request ========================="
   );
+  console.log("suggestShotRequest", request);
 
-  if (typeof targetCarry !== "number") {
+  if (typeof request.targetCarry !== "number") {
     return c.json({ error: "Missing or invalid targetCarry " }, 400);
   }
 
   const suggestion = await suggestShotService.getSuggestion(
-    targetCarry,
-    material,
-    upDownLie ?? 0,
-    rightLeftLie ?? 0,
-    elevation ?? 0,
-    altitude ?? 0
+    request.targetCarry,
+    request.material,
+    request.upDownLie ?? 0,
+    request.rightLeftLie ?? 0,
+    request.elevation ?? 0,
+    request.altitude ?? 0
   );
   if (!suggestion) {
     return c.json({ error: "No suitable shot found" }, 404);
@@ -114,68 +80,8 @@ app.post("/suggestShot", async (c) => {
   return c.json(suggestion, 200);
 });
 
-app.get("/optimize-length", async (c) => {
-  const ballSpeed = Number(c.req.query("ballSpeed"));
-  const maxVLA = c.req.query("maxVLA")
-    ? Number(c.req.query("maxVLA"))
-    : undefined;
-
-  // Validate input
-  if (isNaN(ballSpeed)) {
-    return c.json(
-      {
-        error: "Invalid parameter. ballSpeed is required and must be a number",
-      },
-      400
-    );
-  }
-
-  if (maxVLA !== undefined && isNaN(maxVLA)) {
-    return c.json(
-      {
-        error: "Invalid parameter. maxVLA must be a number if provided",
-      },
-      400
-    );
-  }
-
-  // Validate ranges
-  if (ballSpeed < 2 || ballSpeed > 200) {
-    return c.json(
-      {
-        error: "Ball speed out of range",
-        validRange: "2-200 mph",
-      },
-      400
-    );
-  }
-
-  if (maxVLA !== undefined && (maxVLA < 4 || maxVLA > 50)) {
-    return c.json(
-      {
-        error: "Max VLA out of range",
-        validRange: "4-50 degrees",
-      },
-      400
-    );
-  }
-
-  try {
-    const result = await trajectoryService.findOptimalLength(ballSpeed, maxVLA);
-
-    if (!result) {
-      return c.json({ error: "No matching trajectory found" }, 404);
-    }
-
-    return c.json(result);
-  } catch (error) {
-    console.error("Error finding optimal trajectory:", error);
-    return c.json({ error: "Internal server error" }, 500);
-  }
-});
-
 // Add a simple health check endpoint
-app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 async function serveAsset(c: Context) {
   try {

@@ -12,11 +12,8 @@ export default defineConfig({
   base: process.env.NODE_ENV === "production" ? "/gsp-calc/" : "/",
   server: {
     proxy: {
-      "/trajectory": {
-        target: "http://localhost:3005",
-        changeOrigin: true,
-      },
-      "/suggestShot": {
+      // Match all API endpoints with a single rule
+      "^/api/.*": {
         target: "http://localhost:3005",
         changeOrigin: true,
       },

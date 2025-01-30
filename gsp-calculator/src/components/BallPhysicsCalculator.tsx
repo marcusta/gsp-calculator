@@ -9,20 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PhyMatList } from "@/material";
-import {
-  getRoughSpeedPenalty,
-  getRoughSpinPenalty,
-  getRoughVLAPenalty,
-  getAltitudeModifier,
-  getElevationDistanceModifier,
-} from "@/penalty";
-import { getCarryDataFromServer } from "@/api";
+import { calculateCarry, type CalculateCarryResponse } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import { DistanceUnit, convertMetersToYards } from "@/types/units";
-import {
-  getModifiedLieVla,
-  calculateOfflineDeviation,
-} from "@/lie-calculation";
+
 import {
   Tooltip,
   TooltipContent,
@@ -37,48 +27,13 @@ export function BallPhysicsCalculator() {
   const [vla, setVLA] = useState<number>(0);
   const [spin, setSpin] = useState<number>(0);
   const [materialIndex, setMaterialIndex] = useState<number>(1);
-  const [rawCarry, setRawCarry] = useState<number | null>(null);
-  const [modifiedCarry, setModifiedCarry] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
-  const [offlineDeviation, setOfflineDeviation] = useState<number | null>(null);
   const [altitude, setAltitude] = useState<string>("0");
   const [elevationDiff, setElevationDiff] = useState<string>("0");
-
-  // Calculate modifiers with error handling
-  const calculatePenalties = () => {
-    try {
-      return {
-        speedPenalty: getRoughSpeedPenalty(materialIndex, speed, vla),
-        spinPenalty: getRoughSpinPenalty(materialIndex, speed, vla),
-        vlaPenalty: getRoughVLAPenalty(materialIndex, speed, vla),
-      };
-    } catch (error) {
-      console.error("Error calculating penalties:", error);
-      return {
-        speedPenalty: 1,
-        spinPenalty: 1,
-        vlaPenalty: 1,
-      };
-    }
-  };
-
-  const { speedPenalty, spinPenalty, vlaPenalty } = calculatePenalties();
-
-  const validateLieInput = (value: string): number => {
-    const num = parseFloat(value);
-    return isNaN(num) ? 0 : num;
-  };
-
-  // Calculate modified values
-  const modifiedSpeed = speed * speedPenalty;
-  const modifiedSpin = spin * spinPenalty;
-  const modifiedVLA = getModifiedLieVla(
-    vla * vlaPenalty,
-    validateLieInput(upDownLie)
-  );
+  const [result, setResult] = useState<CalculateCarryResponse | null>(null);
 
   // Filter PhyMatList to only include materials that have entries in the penalty tables
   const validMaterialIndices = [18, 2, 1, 3, 4, 6, 11, 12, 13, 16, 17];
@@ -87,109 +42,34 @@ export function BallPhysicsCalculator() {
     name: PhyMatList[index],
   }));
 
-  // Modify the fetch function to handle loading state
-  const fetchCarryDistances = async () => {
+  const handleCalculate = async () => {
     if (speed && vla && spin) {
       setIsLoading(true);
       try {
-        // Fetch raw carry
-        const rawData = await getCarryDataFromServer(speed, spin, vla);
-        setRawCarry(rawData.Carry);
-
-        // Fetch modified carry
-        const modData = await getCarryDataFromServer(
-          modifiedSpeed,
-          modifiedSpin,
-          modifiedVLA
-        );
-        setModifiedCarry(modData.Carry);
-
-        // Calculate offline deviation if there's a right/left lie angle
-        if (validateLieInput(rightLeftLie) !== 0) {
-          const deviation = calculateOfflineDeviation(
-            modifiedVLA,
-            validateLieInput(rightLeftLie),
-            modData.Carry
-          );
-          setOfflineDeviation(deviation);
-        } else {
-          setOfflineDeviation(null);
-        }
+        const calculatedResult = await calculateCarry({
+          ballSpeed: speed,
+          spin,
+          vla,
+          material: PhyMatList[materialIndex],
+          upDownLie: parseFloat(upDownLie) || 0,
+          rightLeftLie: parseFloat(rightLeftLie) || 0,
+          elevation: parseFloat(elevationDiff) || 0,
+          altitude: parseFloat(altitude) || 0,
+        });
+        setResult(calculatedResult);
       } catch (error) {
-        console.error("Error fetching carry distances:", error);
-        setRawCarry(null);
-        setModifiedCarry(null);
-        setOfflineDeviation(null);
+        console.error("Error calculating carry:", error);
+        setResult(null);
       } finally {
         setIsLoading(false);
       }
     }
   };
 
-  const formatDistance = (
-    modifiedCarry: number,
-    unit: string,
-    elevationDiff: string,
-    modifiedSpeed: number,
-    modifiedSpin: number,
-    modifiedVLA: number
-  ): string => {
-    const elevationValue =
-      unit === "yards"
-        ? convertMetersToYards(parseFloat(elevationDiff) || 0)
-        : parseFloat(elevationDiff) || 0;
-
-    const altitudeModifier = getAltitudeModifier(
-      parseFloat(altitude) || 0,
-      modifiedCarry
-    );
-    const elevationModifier = getElevationDistanceModifier(
-      modifiedCarry,
-      elevationValue,
-      modifiedSpeed,
-      modifiedSpin,
-      modifiedVLA
-    );
-
-    const totalDistance =
-      unit === "yards"
-        ? convertMetersToYards(
-            modifiedCarry * altitudeModifier + elevationModifier
-          )
-        : modifiedCarry * altitudeModifier + elevationModifier;
-
-    return `${totalDistance.toFixed(1)} ${unit}`;
-  };
-
-  const formatElevationEffect = (
-    modifiedCarry: number,
-    unit: string,
-    elevationDiff: string,
-    modifiedSpeed: number,
-    modifiedSpin: number,
-    modifiedVLA: number
-  ): string => {
-    const elevationValue =
-      unit === "yards"
-        ? convertMetersToYards(parseFloat(elevationDiff) || 0)
-        : parseFloat(elevationDiff) || 0;
-
-    const elevationModifier = getElevationDistanceModifier(
-      modifiedCarry,
-      elevationValue,
-      modifiedSpeed,
-      modifiedSpin,
-      modifiedVLA
-    );
-
-    const convertedModifier =
-      unit === "yards"
-        ? convertMetersToYards(elevationModifier)
-        : elevationModifier;
-
-    const direction = elevationModifier > 0 ? "shorter" : "longer";
-
-    return `${convertedModifier.toFixed(1)} ${unit} ${direction}`;
+  const formatDistance = (distance: number): string => {
+    const convertedDistance =
+      unit === "yards" ? convertMetersToYards(distance) : distance;
+    return `${convertedDistance.toFixed(1)} ${unit}`;
   };
 
   return (
@@ -370,107 +250,73 @@ export function BallPhysicsCalculator() {
           </Label>
         </div>
 
-        <div className="mt-6 space-y-4">
-          <h3 className="text-lg font-semibold">Modifiers:</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="font-medium">Speed Modifier:</p>
-              <p>{speedPenalty.toFixed(3)}</p>
-            </div>
-            <div>
-              <p className="font-medium">Spin Modifier:</p>
-              <p>{spinPenalty.toFixed(3)}</p>
-            </div>
-            <div>
-              <p className="font-medium">VLA Modifier:</p>
-              <p>{vlaPenalty.toFixed(3)}</p>
-            </div>
-          </div>
-
-          <h3 className="text-lg font-semibold">Modified Values:</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="font-medium">Modified Speed:</p>
-              <p>{modifiedSpeed.toFixed(2)}</p>
-            </div>
-            <div>
-              <p className="font-medium">Modified Spin:</p>
-              <p>{modifiedSpin.toFixed(2)}</p>
-            </div>
-            <div>
-              <p className="font-medium">Modified VLA:</p>
-              <p>{modifiedVLA.toFixed(2)}</p>
-            </div>
-          </div>
-
-          <div className="mt-4 mb-4">
-            <button
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
-              onClick={fetchCarryDistances}
-              disabled={isLoading || !speed || !vla || !spin}
-            >
-              {isLoading ? "Calculating..." : "Calculate Carry"}
-            </button>
-          </div>
-
-          <h3 className="text-lg font-semibold">Carry Distances:</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="font-medium">Raw Carry:</p>
-              <p>
-                {rawCarry
-                  ? `${(unit === "yards"
-                      ? convertMetersToYards(rawCarry)
-                      : rawCarry
-                    ).toFixed(1)} ${unit}`
-                  : "Not calculated"}
-              </p>
-            </div>
-            <div>
-              <p className="font-medium">Modified Carry:</p>
-              <p>
-                {modifiedCarry
-                  ? formatDistance(
-                      modifiedCarry,
-                      unit,
-                      elevationDiff,
-                      modifiedSpeed,
-                      modifiedSpin,
-                      modifiedVLA
-                    )
-                  : "Not calculated"}
-              </p>
-            </div>
-            <div className="col-span-2">
-              <p className="font-medium">Elevation Effect:</p>
-              <p>
-                {modifiedCarry
-                  ? formatElevationEffect(
-                      modifiedCarry,
-                      unit,
-                      elevationDiff,
-                      modifiedSpeed,
-                      modifiedSpin,
-                      modifiedVLA
-                    )
-                  : "Not calculated"}
-              </p>
-            </div>
-            {offlineDeviation !== null && (
-              <div className="col-span-2">
-                <p className="font-medium text-yellow-500">
-                  Ball will travel{" "}
-                  {unit === "yards"
-                    ? convertMetersToYards(Math.abs(offlineDeviation)).toFixed(
-                        1
-                      )
-                    : Math.abs(offlineDeviation).toFixed(1)}{" "}
-                  {unit} {offlineDeviation > 0 ? "right" : "left"} of target
-                </p>
-              </div>
-            )}
-          </div>
+        <div className="mt-4 mb-4">
+          <button
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+            onClick={handleCalculate}
+            disabled={isLoading || !speed || !vla || !spin}
+          >
+            {isLoading ? "Calculating..." : "Calculate Carry"}
+          </button>
         </div>
+
+        {result && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="font-medium">Speed Modifier:</p>
+                <p>{result.speedPenalty.toFixed(3)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Spin Modifier:</p>
+                <p>{result.spinPenalty.toFixed(3)}</p>
+              </div>
+              <div>
+                <p className="font-medium">VLA Modifier:</p>
+                <p>{result.vlaPenalty.toFixed(3)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="font-medium">Modified Speed:</p>
+                <p>{result.speedModified.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Modified Spin:</p>
+                <p>{result.spinModified.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Modified VLA:</p>
+                <p>{result.vlaModified.toFixed(2)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="font-medium">Raw Carry:</p>
+                <p>{formatDistance(result.carryRaw)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Modified Carry:</p>
+                <p>{formatDistance(result.carryModified)}</p>
+              </div>
+              <div>
+                <p className="font-medium">Final Carry:</p>
+                <p>{formatDistance(result.envCarry)}</p>
+              </div>
+              {result.offlineDeviation !== 0 && (
+                <div>
+                  <p className="font-medium text-yellow-500">
+                    Ball will travel{" "}
+                    {formatDistance(Math.abs(result.offlineDeviation))}
+                    {result.offlineDeviation > 0 ? " right" : " left"} of target
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

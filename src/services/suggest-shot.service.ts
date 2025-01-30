@@ -1,15 +1,8 @@
 // services/suggestShot.service.ts
-import { clubs, type Club } from "./club-ranges";
+import type { ShotSuggestion } from "../../gsp-calculator/src/api";
+import { guessClub, tryClub } from "./club";
+import { clubs } from "./club-ranges";
 import { TrajectoryService } from "./database.service";
-import { calculateOfflineDeviation } from "./lie-calculation";
-import {
-  getAltitudeModifier,
-  getElevationDistanceModifier,
-  getRoughSpeedPenalty,
-  getRoughSpinPenalty,
-  getRoughVLAPenalty,
-} from "./penalty";
-import { getModifiedLieVla } from "./shot-calculator";
 
 export class SuggestShotService {
   private trajectoryService: TrajectoryService;
@@ -53,18 +46,6 @@ export class SuggestShotService {
   }
 }
 
-export interface ShotSuggestion {
-  ballSpeed: number; // The penalized/modified speed
-  rawBallSpeed: number; // The original unmodified speed
-  spin: number; // The penalized/modified spin
-  rawSpin: number; // The original unmodified spin
-  vla: number;
-  rawCarry: number; // direct from DB
-  estimatedCarry: number;
-  clubName: string;
-  offlineAimAdjustment: number; // Positive means aim right, negative means aim left (meters)
-}
-
 /**
  * Main function that the route will call.
  *
@@ -85,167 +66,47 @@ export async function suggestShot(
   altitude: number,
   trajectoryService: TrajectoryService
 ): Promise<ShotSuggestion | undefined> {
-  // Get speed modifier based on material and lie
-  const getSpeedModifier = (speed: number, vla: number) => {
-    return getRoughSpeedPenalty(material, speed, vla);
-  };
+  const clubGuess = guessClub(targetCarry, material, elevation, altitude);
 
-  const environmentModifiedCarryForFindingClub =
-    calculateNeededEnvironmentModifiedCarry(targetCarry, elevation, altitude);
+  let bestResult = await tryClub(
+    clubGuess.club,
+    targetCarry,
+    material,
+    upDownLie,
+    rightLeftLie,
+    elevation,
+    altitude,
+    trajectoryService
+  );
 
-  // Helper to calculate modified carry range for a club
-  const getModifiedCarryRange = (club: Club) => {
-    const avgVLA = (club.vlaMax + club.vlaMin) / 2;
-    const minSpeedMod = getSpeedModifier(club.speedMin, avgVLA);
-    const maxSpeedMod = getSpeedModifier(club.speedMax, avgVLA);
-    return {
-      minCarry: club.carryMin * minSpeedMod,
-      maxCarry: club.carryMax * maxSpeedMod,
-      avgVLA,
-    };
-  };
+  const ACCEPTABLE_DIFF = 5; //meters
 
-  // First find the best club based on carry ranges
-  let bestClubIndex = -1;
-  let bestScore = Infinity;
-
-  clubs.forEach((club, index) => {
-    const { minCarry, maxCarry } = getModifiedCarryRange(club);
-    // Allow some flexibility in the ranges
-    const minAllowed = minCarry * 0.9;
-    const maxAllowed = maxCarry * 1.1;
-
-    if (
-      environmentModifiedCarryForFindingClub >= minAllowed &&
-      environmentModifiedCarryForFindingClub <= maxAllowed
+  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF) {
+    let strongerOrWeakerClubIndex = 0;
+    if (bestResult.estimatedCarry < targetCarry && clubGuess.clubIndex > 0) {
+      strongerOrWeakerClubIndex = -1;
+    } else if (
+      bestResult.estimatedCarry > targetCarry &&
+      clubGuess.clubIndex < clubs.length - 1
     ) {
-      const rangeCenter = (minCarry + maxCarry) / 2;
-      const score = Math.abs(
-        environmentModifiedCarryForFindingClub - rangeCenter
-      );
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestClubIndex = index;
-      }
+      strongerOrWeakerClubIndex = 1;
     }
-  });
-
-  if (bestClubIndex === -1) {
-    throw new Error("No suitable club found for the target carry distance");
-  }
-
-  // Function to try a specific club with carry data
-  async function tryClub(clubIndex: number): Promise<ShotSuggestion> {
-    const club = clubs[clubIndex];
-    const speedRange = club.speedMax - club.speedMin;
-    const avgSpin = (club.spinMax + club.spinMin) / 2;
-    const avgVLA = (club.vlaMax + club.vlaMin) / 2;
-
-    // Determine number of speed samples based on range size
-    const SPEED_RANGE_THRESHOLD = 5; // m/s
-    const speeds =
-      speedRange <= SPEED_RANGE_THRESHOLD
-        ? [club.speedMin, (club.speedMin + club.speedMax) / 2, club.speedMax]
-        : [
-            club.speedMin,
-            club.speedMin + speedRange * 0.33,
-            club.speedMin + speedRange * 0.66,
-            club.speedMax,
-          ];
-
-    const PERFECT_MATCH_THRESHOLD = 2.5; // meters - stop searching if we find a match this close
-    let bestModifiedResult: ShotResult | null = null;
-    let bestDiff = Infinity;
-
-    for (const speed of speeds) {
-      const request: ShotRequest = {
+    if (strongerOrWeakerClubIndex !== 0) {
+      const newResult = await tryClub(
+        clubs[clubGuess.clubIndex + strongerOrWeakerClubIndex],
+        targetCarry,
         material,
-        speed,
-        spin: avgSpin,
-        vla: avgVLA,
         upDownLie,
         rightLeftLie,
         elevation,
         altitude,
-      };
-      const result = await calculateTrajectory(request, trajectoryService);
-
-      if (!result) continue;
-
-      const currentDiff = Math.abs(targetCarry - result.envCarry);
-
-      // Early exit if we found a very close match
-      if (currentDiff <= PERFECT_MATCH_THRESHOLD) {
-        bestModifiedResult = result;
-        break;
-      }
-
-      // If this result is worse than our best by a significant margin, skip to next speed
-      if (bestModifiedResult && currentDiff > bestDiff * 1.5) continue;
-
-      if (currentDiff < bestDiff) {
-        bestDiff = currentDiff;
-        bestModifiedResult = result;
-      }
-    }
-
-    if (!bestModifiedResult) {
-      throw new Error(`No valid trajectories found for club ${club.name}`);
-    }
-
-    const rawCarryData = await trajectoryService.findClosestTrajectory(
-      bestModifiedResult.speed,
-      avgSpin,
-      avgVLA
-    );
-
-    if (!rawCarryData?.Carry) {
-      throw new Error(
-        `Failed to get raw trajectory data for club ${club.name}`
+        trajectoryService
       );
-    }
-
-    return {
-      ballSpeed: bestModifiedResult.adjustedSpeed,
-      rawBallSpeed: bestModifiedResult.speed,
-      spin: bestModifiedResult.adjustedSpin,
-      rawSpin: avgSpin,
-      vla: bestModifiedResult.adjustedVLA,
-      estimatedCarry: bestModifiedResult.envCarry,
-      rawCarry: rawCarryData.Carry,
-      clubName: club.name,
-      offlineAimAdjustment: -bestModifiedResult.offlineDeviation,
-    };
-  }
-
-  // Try the initially selected club
-  let bestResult = await tryClub(bestClubIndex);
-  const ACCEPTABLE_DIFF = 5; // 5 meters difference is acceptable
-
-  // Only try adjacent club if current result is significantly off
-  if (Math.abs(bestResult.estimatedCarry - targetCarry) > ACCEPTABLE_DIFF) {
-    if (bestResult.estimatedCarry < targetCarry && bestClubIndex > 0) {
-      // Try one stronger club
-      console.log("TRY one stronger club");
-      const strongerResult = await tryClub(bestClubIndex - 1);
       if (
-        Math.abs(strongerResult.estimatedCarry - targetCarry) <
+        Math.abs(newResult.estimatedCarry - targetCarry) <
         Math.abs(bestResult.estimatedCarry - targetCarry) * 0.8 // Only use if significantly better
       ) {
-        bestResult = strongerResult;
-      }
-    } else if (
-      bestResult.estimatedCarry > targetCarry &&
-      bestClubIndex < clubs.length - 1
-    ) {
-      // Try one weaker club
-      const weakerResult = await tryClub(bestClubIndex + 1);
-      if (
-        Math.abs(weakerResult.estimatedCarry - targetCarry) <
-        Math.abs(bestResult.estimatedCarry - targetCarry) * 0.8 // Only use if significantly better
-      ) {
-        bestResult = weakerResult;
+        bestResult = newResult;
       }
     }
   }
@@ -264,155 +125,5 @@ export async function suggestShot(
 
   return {
     ...bestResult,
-  };
-}
-
-function calculateEnvironmentModifiedCarry(
-  carry: number,
-  elevation: number,
-  altitude: number,
-  club?: Club | { spin: number; vla: number; speed: number }
-) {
-  const { ballSpeed, spin, vla } = getBallDataFromClub(club);
-  const altitudeEffect = getAltitudeModifier(altitude);
-  const elevationEffect = getElevationDistanceModifier(
-    carry,
-    elevation,
-    ballSpeed,
-    spin,
-    vla
-  );
-  const result = (carry + elevationEffect) * altitudeEffect;
-  console.log(
-    "===> environmentModifiedCarry",
-    result,
-    "input carry",
-    carry,
-    "elevation",
-    elevation,
-    "altitude",
-    altitude
-  );
-  return result;
-}
-
-function calculateNeededEnvironmentModifiedCarry(
-  carry: number,
-  elevation: number,
-  altitude: number,
-  club?: Club | { spin: number; vla: number; speed: number }
-) {
-  const { ballSpeed, spin, vla } = getBallDataFromClub(club);
-  const altitudeEffect = getAltitudeModifier(altitude);
-  const elevationEffect = getElevationDistanceModifier(
-    carry,
-    elevation,
-    ballSpeed,
-    spin,
-    vla
-  );
-  const result = (carry - elevationEffect) / altitudeEffect;
-  return result;
-}
-
-function getBallDataFromClub(
-  club?: Club | { spin: number; vla: number; speed: number }
-) {
-  let ballSpeed = 120;
-  let spin = 5800;
-  let vla = 18;
-  if (club && "speedMin" in club) {
-    ballSpeed = club.speedMin;
-    spin = (club.spinMax + club.spinMin) / 2;
-    vla = (club.vlaMax + club.vlaMin) / 2;
-  } else if (club) {
-    ballSpeed = club.speed;
-    spin = club.spin;
-    vla = club.vla;
-  }
-  return { ballSpeed, spin, vla };
-}
-
-export interface ShotRequest {
-  material: string;
-  speed: number;
-  vla: number;
-  spin: number;
-  upDownLie: number;
-  rightLeftLie: number;
-  elevation: number;
-  altitude: number;
-}
-
-export interface ShotResult extends ShotRequest {
-  adjustedSpeed: number;
-  adjustedSpin: number;
-  adjustedVLA: number;
-  carry: number;
-  envCarry: number;
-  offlineDeviation: number;
-}
-
-async function calculateTrajectory(
-  request: ShotRequest,
-  trajectoryService: TrajectoryService
-): Promise<ShotResult | null> {
-  const speedPenalty = getRoughSpeedPenalty(
-    request.material,
-    request.speed,
-    request.vla
-  );
-  const spinPenalty = getRoughSpinPenalty(
-    request.material,
-    request.speed,
-    request.vla
-  );
-  const vlaPenalty = getRoughVLAPenalty(
-    request.material,
-    request.speed,
-    request.vla
-  );
-
-  const adjustedSpeed = request.speed * speedPenalty;
-  const adjustedSpin = request.spin * spinPenalty;
-  const adjustedVLA = request.vla * vlaPenalty;
-  const modifiedVLA = getModifiedLieVla(adjustedVLA, request.upDownLie);
-
-  const modifiedCarryData = await trajectoryService.findClosestTrajectory(
-    adjustedSpeed,
-    adjustedSpin,
-    modifiedVLA
-  );
-
-  if (!modifiedCarryData?.Carry) {
-    return null;
-  }
-
-  const environmentModifiedCarryForClub =
-    calculateNeededEnvironmentModifiedCarry(
-      modifiedCarryData.Carry,
-      request.elevation,
-      request.altitude,
-      {
-        speed: adjustedSpeed,
-        spin: adjustedSpin,
-        vla: modifiedVLA,
-      }
-    );
-
-  const offlineDeviation = calculateOfflineDeviation(
-    modifiedVLA,
-    request.rightLeftLie,
-    environmentModifiedCarryForClub
-  );
-
-  return {
-    ...request,
-    adjustedSpeed,
-    adjustedSpin,
-    adjustedVLA: modifiedVLA,
-    carry: modifiedCarryData.Carry,
-    envCarry: environmentModifiedCarryForClub,
-    offlineDeviation,
   };
 }

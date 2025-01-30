@@ -18,7 +18,7 @@ export async function getCarryDataFromServer(
 ): Promise<CarryData> {
   try {
     const response = await fetch(
-      `${urlBase}/trajectory?ballSpeed=${ballSpeed}&spin=${spin}&vla=${vla}`
+      `${urlBase}/api/trajectory?ballSpeed=${ballSpeed}&spin=${spin}&vla=${vla}`
     );
     const data = await response.json();
     return data;
@@ -49,7 +49,7 @@ export async function suggestShot(
   altitude: number = 0
 ): Promise<ShotSuggestion> {
   try {
-    const response = await fetch(`${urlBase}/suggestShot`, {
+    const response = await fetch(`${urlBase}/api/suggestShot`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -71,6 +71,73 @@ export async function suggestShot(
     return await response.json();
   } catch (error) {
     console.error("Error getting shot suggestion:", error);
+    throw error;
+  }
+}
+
+export interface CalculateCarryResponse {
+  material: string;
+  rawSpin: number;
+  rawVLA: number;
+  rawSpeed: number;
+  carryRaw: number;
+  carryModified: number;
+  envCarry: number;
+  offlineDeviation: number;
+  speedModified: number;
+  vlaModified: number;
+  spinModified: number;
+  speedPenalty: number;
+  spinPenalty: number;
+  vlaPenalty: number;
+}
+
+export interface CalculateCarryRequest {
+  ballSpeed: number;
+  spin: number;
+  vla: number;
+  material: string;
+  upDownLie?: number;
+  rightLeftLie?: number;
+  elevation?: number;
+  altitude?: number;
+}
+
+export async function calculateCarry({
+  ballSpeed,
+  spin,
+  vla,
+  material,
+  upDownLie = 0,
+  rightLeftLie = 0,
+  elevation = 0,
+  altitude = 0,
+}: CalculateCarryRequest): Promise<CalculateCarryResponse> {
+  try {
+    const response = await fetch(`${urlBase}/api/calculate-carry`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ballSpeed,
+        spin,
+        vla,
+        material,
+        upDownLie,
+        rightLeftLie,
+        elevation,
+        altitude,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to calculate carry");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error calculating carry:", error);
     throw error;
   }
 }
