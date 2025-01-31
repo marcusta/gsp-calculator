@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
+import { useUnit } from "../contexts/UnitContext";
 
 export function BallPhysicsCalculator() {
   const [speed, setSpeed] = useState<number>(0);
@@ -32,13 +33,13 @@ export function BallPhysicsCalculator() {
   const [material, setMaterial] = useState<string>("fairway");
   const [materials, setMaterials] = useState<MaterialInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
   const [altitude, setAltitude] = useState<string>("0");
   const [elevationDiff, setElevationDiff] = useState<string>("0");
   const [result, setResult] = useState<CalculateCarryResponse | null>(null);
   const [_, setError] = useState<string | null>(null);
+  const { unitSystem } = useUnit();
 
   useEffect(() => {
     const loadMaterials = async () => {
@@ -84,8 +85,10 @@ export function BallPhysicsCalculator() {
 
   const formatDistance = (distance: number): string => {
     const convertedDistance =
-      unit === "yards" ? convertMetersToYards(distance) : distance;
-    return `${convertedDistance.toFixed(1)} ${unit}`;
+      unitSystem === "imperial" ? convertMetersToYards(distance) : distance;
+    return `${convertedDistance.toFixed(1)} ${
+      unitSystem === "imperial" ? "yards" : "meters"
+    }`;
   };
 
   return (
@@ -175,7 +178,8 @@ export function BallPhysicsCalculator() {
 
           <div className="space-y-2">
             <Label htmlFor="elevation-diff">
-              Elevation Difference ({unit})
+              Elevation Difference (
+              {unitSystem === "imperial" ? "yards" : "meters"})
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
@@ -250,17 +254,6 @@ export function BallPhysicsCalculator() {
               className="w-24"
             />
           </div>
-        </div>
-
-        <div className="flex items-center space-x-2 mb-4">
-          <Switch
-            id="unit-toggle"
-            checked={unit === "yards"}
-            onCheckedChange={(checked) => setUnit(checked ? "yards" : "meters")}
-          />
-          <Label htmlFor="unit-toggle" className="text-sm font-medium">
-            Show distances in yards
-          </Label>
         </div>
 
         <div className="mt-4 mb-4">

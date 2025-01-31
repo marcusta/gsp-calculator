@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { Menu } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState } from "react";
+import { UnitToggle } from "./UnitToggle";
 
 export function BallPhysicsTools() {
   const [currentTab, setCurrentTab] = useState("calculator");
@@ -25,15 +26,18 @@ export function BallPhysicsTools() {
       {/* Mobile Menu */}
       <div className="sm:hidden">
         <div className="p-4 border-b border-white/10">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-white w-full flex justify-between items-center"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            <span>{tabs.find((tab) => tab.value === currentTab)?.label}</span>
-            <Menu className="h-5 w-5" />
-          </Button>
+          <div className="flex justify-between items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-white flex-1 flex justify-between items-center"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+            >
+              <span>{tabs.find((tab) => tab.value === currentTab)?.label}</span>
+              <Menu className="h-5 w-5" />
+            </Button>
+            <UnitToggle />
+          </div>
         </div>
 
         {/* Mobile Menu Dropdown */}
@@ -72,14 +76,17 @@ export function BallPhysicsTools() {
       {/* Desktop Tabs */}
       <div className="hidden sm:block">
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
-          <div className="w-full overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
-            <TabsList className="w-max min-w-full flex-nowrap">
-              {tabs.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value}>
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <div className="flex justify-between items-center mb-4">
+            <div className="w-full overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+              <TabsList className="w-max min-w-full flex-nowrap">
+                {tabs.map((tab) => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+            <UnitToggle className="ml-4" />
           </div>
 
           <TabsContent value="calculator">

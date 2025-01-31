@@ -3,15 +3,16 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { getDistanceForSpeed, getSpeedForDistance } from "@/putting";
 import { Switch } from "@/components/ui/switch";
+import { useUnit } from "../contexts/UnitContext";
 
 export function PuttCalculator() {
+  const { unitSystem } = useUnit();
   const [mode, setMode] = useState<"speedToDistance" | "distanceToSpeed">(
     "speedToDistance"
   );
   const [speed, setSpeed] = useState<string>("");
   const [distance, setDistance] = useState<string>("");
   const [stimp, setStimp] = useState<number>(11);
-  const [useMetric, setUseMetric] = useState<boolean>(true);
 
   // Add available stimp values
   const stimpValues = [10, 11, 12, 13];
@@ -20,15 +21,16 @@ export function PuttCalculator() {
     if (mode === "speedToDistance" && speed) {
       let result = getDistanceForSpeed(Number(speed), stimp);
       // Convert meters to feet if using imperial
-      if (!useMetric) {
+      if (unitSystem === "imperial") {
         result = result * 3.28084;
       }
       setDistance(result.toFixed(2));
     } else if (mode === "distanceToSpeed" && distance) {
       // Convert feet to meters if using imperial
-      const distanceInMeters = useMetric
-        ? Number(distance)
-        : Number(distance) / 3.28084;
+      const distanceInMeters =
+        unitSystem === "imperial"
+          ? Number(distance) / 3.28084
+          : Number(distance);
       const result = getSpeedForDistance(distanceInMeters, stimp);
       setSpeed(result.toFixed(2));
     }
@@ -44,18 +46,6 @@ export function PuttCalculator() {
       <h2 className="text-2xl font-bold mb-6">Putt Calculator</h2>
 
       <div className="space-y-6 max-w-xl">
-        {/* Unit Selection */}
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="unit-toggle"
-            checked={useMetric}
-            onCheckedChange={setUseMetric}
-          />
-          <Label htmlFor="unit-toggle">
-            {useMetric ? "Metric (meters)" : "Imperial (feet)"}
-          </Label>
-        </div>
-
         {/* Stimp Selection */}
         <div className="space-y-2">
           <Label>Stimp Speed</Label>
@@ -109,13 +99,13 @@ export function PuttCalculator() {
 
           <div className="space-y-2">
             <Label htmlFor="distance">
-              Distance ({useMetric ? "meters" : "feet"})
+              Distance ({unitSystem === "imperial" ? "feet" : "meters"})
             </Label>
             <Input
               id="distance"
               type="number"
               min="0"
-              max={useMetric ? 20 : 65} // Adjusted max for feet
+              max={unitSystem === "imperial" ? 65 : 20} // Adjusted max for feet
               step="0.1"
               value={distance}
               onChange={(e) => setDistance(e.target.value)}

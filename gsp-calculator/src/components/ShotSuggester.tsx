@@ -23,6 +23,7 @@ import {
   convertYardsToMeters,
 } from "@/types/units";
 import { suggestShot, getMaterials, type MaterialInfo } from "@/api";
+import { useUnit } from "../contexts/UnitContext";
 
 interface ShotSuggestion {
   club: string;
@@ -32,11 +33,11 @@ interface ShotSuggestion {
 }
 
 export function ShotSuggester() {
+  const { unitSystem } = useUnit();
   const [targetCarry, setTargetCarry] = useState<string>("");
   const [suggestions, setSuggestions] = useState<ShotSuggestion[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
   const [altitude, setAltitude] = useState<string>("0");
@@ -68,12 +69,12 @@ export function ShotSuggester() {
     setError(null);
     try {
       const targetDistance =
-        unit === "yards"
+        unitSystem === "imperial"
           ? convertYardsToMeters(parseFloat(targetCarry))
           : parseFloat(targetCarry);
 
       const elevationDiffMeters =
-        unit === "yards"
+        unitSystem === "imperial"
           ? convertYardsToMeters(parseFloat(elevationDiff) || 0)
           : parseFloat(elevationDiff) || 0;
 
@@ -109,21 +110,13 @@ export function ShotSuggester() {
     <div className="p-6 min-h-[600px]">
       <h2 className="text-2xl font-bold mb-6">Shot Suggester</h2>
 
-      <div className="flex items-center space-x-2 mb-4">
-        <Switch
-          id="unit-toggle"
-          checked={unit === "yards"}
-          onCheckedChange={(checked) => setUnit(checked ? "yards" : "meters")}
-        />
-        <Label htmlFor="unit-toggle" className="text-sm font-medium">
-          Show distances in yards
-        </Label>
-      </div>
-
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="target-carry">Target Carry Distance ({unit})</Label>
+            <Label htmlFor="target-carry">
+              Target Carry Distance (
+              {unitSystem === "imperial" ? "yards" : "meters"})
+            </Label>
             <Input
               id="target-carry"
               type="number"
@@ -180,7 +173,8 @@ export function ShotSuggester() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="elevation-diff">
-              Elevation Difference ({unit})
+              Elevation Difference (
+              {unitSystem === "imperial" ? "yards" : "meters"})
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
@@ -271,22 +265,22 @@ export function ShotSuggester() {
                   </p>
                   <p>
                     Plays as:{" "}
-                    {(unit === "yards"
+                    {(unitSystem === "imperial"
                       ? convertMetersToYards(suggestion.rawCarry)
                       : suggestion.rawCarry
                     ).toFixed(1)}{" "}
-                    {unit}
+                    {unitSystem === "imperial" ? "yards" : "meters"}
                   </p>
                   {suggestion.offlineDeviation !== 0 && (
                     <p>
                       Aim{" "}
-                      {(unit === "yards"
+                      {(unitSystem === "imperial"
                         ? convertMetersToYards(
                             Math.abs(suggestion.offlineDeviation)
                           )
                         : Math.abs(suggestion.offlineDeviation)
                       ).toFixed(1)}{" "}
-                      {unit}{" "}
+                      {unitSystem === "imperial" ? "yards" : "meters"}{" "}
                       {suggestion.offlineDeviation < 0 ? "left" : "right"}
                     </p>
                   )}

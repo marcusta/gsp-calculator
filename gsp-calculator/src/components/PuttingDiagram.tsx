@@ -17,6 +17,7 @@ import {
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useUnit } from "../contexts/UnitContext";
 
 // Register ChartJS components
 ChartJS.register(
@@ -51,8 +52,8 @@ function generateSpeedBasedData(
 }
 
 export function PuttingDiagram() {
+  const { unitSystem } = useUnit();
   const [selectedStimp, setSelectedStimp] = useState(11);
-  const [useMetric, setUseMetric] = useState(true);
   const availableStimps = getAvailableStimps();
 
   // Generate data points from 2mph to 16mph in 0.5mph increments
@@ -61,7 +62,7 @@ export function PuttingDiagram() {
     16, // end speed (mph)
     0.5, // speed increment (mph)
     selectedStimp,
-    useMetric
+    unitSystem === "metric"
   );
 
   const data = {
@@ -93,7 +94,7 @@ export function PuttingDiagram() {
       x: {
         title: {
           display: true,
-          text: `Distance (${useMetric ? "meters" : "feet"})`,
+          text: `Distance (${unitSystem === "imperial" ? "feet" : "meters"})`,
         },
       },
       y: {
@@ -110,17 +111,6 @@ export function PuttingDiagram() {
       <h2 className="text-2xl font-bold mb-6">
         Putting Distance-Speed Diagram
       </h2>
-
-      <div className="flex items-center space-x-2 mb-4">
-        <Switch
-          id="unit-toggle"
-          checked={useMetric}
-          onCheckedChange={setUseMetric}
-        />
-        <Label htmlFor="unit-toggle">
-          {useMetric ? "Metric (meters)" : "Imperial (feet)"}
-        </Label>
-      </div>
 
       <div className="flex gap-2 mb-4">
         {availableStimps.map((stimp) => (

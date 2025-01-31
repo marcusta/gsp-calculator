@@ -26,8 +26,10 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { DistanceUnit, convertMetersToYards } from "@/types/units";
 import { Input } from "@/components/ui/input";
+import { useUnit } from "../contexts/UnitContext";
 
 export function ClubShotAnalyzer() {
+  const { unitSystem } = useUnit();
   const [club, setClub] = useState<string>("7 Iron"); // Default to 7 iron
   const [clubs, setClubs] = useState<ClubInfo[]>([]);
   const [material, setMaterial] = useState<string>("fairway");
@@ -36,7 +38,6 @@ export function ClubShotAnalyzer() {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
   const [altitude, setAltitude] = useState<string>("0");
@@ -98,24 +99,16 @@ export function ClubShotAnalyzer() {
   };
 
   const formatDistance = (meters: number): string => {
-    const distance = unit === "yards" ? convertMetersToYards(meters) : meters;
-    return `${distance.toFixed(1)}${unit}`;
+    const distance =
+      unitSystem === "imperial" ? convertMetersToYards(meters) : meters;
+    return `${distance.toFixed(1)}${
+      unitSystem === "imperial" ? "yards" : "meters"
+    }`;
   };
 
   return (
     <div className="p-6 min-h-[600px]">
       <h2 className="text-2xl font-bold mb-6">Club Shot Calculator</h2>
-
-      <div className="flex items-center space-x-2 mb-4">
-        <Switch
-          id="unit-toggle"
-          checked={unit === "yards"}
-          onCheckedChange={(checked) => setUnit(checked ? "yards" : "meters")}
-        />
-        <Label htmlFor="unit-toggle" className="text-sm font-medium">
-          Show distances in yards
-        </Label>
-      </div>
 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -230,7 +223,8 @@ export function ClubShotAnalyzer() {
 
         <div className="space-y-2">
           <Label htmlFor="elevation">
-            Elevation Difference ({unit})
+            Elevation Difference (
+            {unitSystem === "imperial" ? "yards" : "meters"})
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
