@@ -25,6 +25,7 @@ import {
 } from "@/api";
 import { Input } from "@/components/ui/input";
 import { useUnit } from "../contexts/UnitContext";
+import { convertMetersToYards } from "@/types/units";
 
 interface QuickSelectButtonProps {
   value: number;
