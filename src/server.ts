@@ -118,7 +118,20 @@ async function serveAsset(c: Context) {
     const path = c.req.path
       .replace("/assets/", "")
       .replace("/gsp-calc/assets/", "");
-    const filePath = `./public/frontend/assets/${path}`;
+
+    // Prevent directory traversal attacks
+    const normalizedPath = path.split(/[\\/]+/).join("/");
+    if (
+      normalizedPath.includes("..") ||
+      normalizedPath.startsWith("/") ||
+      normalizedPath.includes(":")
+    ) {
+      console.warn("Attempted path traversal attack:", path);
+      return c.json({ error: "Invalid asset path" }, 403);
+    }
+
+    const filePath = `./public/frontend/assets/${normalizedPath}`;
+
     const file = await readFile(filePath);
 
     // Set appropriate content-type based on file extension

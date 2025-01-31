@@ -38,6 +38,17 @@ export async function calculateTrajectory(
   const adjustedVLA = request.vla * vlaPenalty;
   const modifiedVLA = getModifiedLieVla(adjustedVLA, request.upDownLie);
 
+  console.log(
+    "adjustedSpeed: ",
+    adjustedSpeed,
+    "adjustedSpin: ",
+    adjustedSpin,
+    "adjustedVLA: ",
+    adjustedVLA,
+    "modifiedVLA: ",
+    modifiedVLA
+  );
+
   const modifiedCarryData = await trajectoryService.findClosestTrajectory(
     adjustedSpeed,
     adjustedSpin,
@@ -95,7 +106,7 @@ export function calculateEnvironmentModifiedCarry(
     vla
   );
   const result = (carry + elevationEffect) * altitudeEffect;
-  console.log(
+  /*console.log(
     "===> environmentModifiedCarry",
     result,
     "input carry",
@@ -104,7 +115,7 @@ export function calculateEnvironmentModifiedCarry(
     elevation,
     "altitude",
     altitude
-  );
+  );*/
   return result;
 }
 

@@ -35,9 +35,6 @@ export async function analyzeShotWithClub(
       const power = i / (increments - 1); // 0 to 1
       const speed = club.speedMin + speedRange * power;
 
-      console.log("avgVLA", avgVLA);
-
-      // Calculate carries
       const estimatedCarryData = await calculateTrajectory(
         {
           material,

@@ -2,7 +2,6 @@
  * Speed ↔ Distance Mapping in TypeScript
  ******************************************************/
 
-// 1. Define the interfaces for our data
 export interface SpeedDistanceData {
   speed: number; // Ball speed in mph
   distance: number; // Total length in meters
@@ -12,7 +11,6 @@ export interface StimpData {
   [key: number]: SpeedDistanceData[];
 }
 
-// 2. Define tables for different stimp values
 const speedDistanceTables: StimpData = {
   10: [
     { speed: 1.8, distance: 0.7 },
