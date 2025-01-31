@@ -141,3 +141,115 @@ export async function calculateCarry({
     throw error;
   }
 }
+
+export interface ShotAnalyzerRequest {
+  club: string;
+  material: string;
+  upDownLie: number;
+  rightLeftLie: number;
+  altitude: number;
+  elevation: number;
+  increments: number;
+}
+
+export interface ShotIncrementResult {
+  power: number;
+  ballSpeed: number;
+  spin: number;
+  vla: number;
+  rawCarry: number;
+  estimatedCarry: number;
+  envCarry: number;
+  offlineDeviation: number;
+  modifiers: {
+    speedPenalty: number;
+    spinPenalty: number;
+    vlaPenalty: number;
+  };
+}
+
+export interface ShotAnalyzerResponse {
+  request: ShotAnalyzerRequest;
+  results: (ShotIncrementResult | null)[];
+}
+
+export async function analyzeClubShot(
+  club: string,
+  material: string,
+  upDownLie: number = 0,
+  rightLeftLie: number = 0,
+  elevation: number = 0,
+  altitude: number = 0
+): Promise<ShotAnalyzerResponse> {
+  const request: ShotAnalyzerRequest = {
+    club,
+    material,
+    upDownLie,
+    rightLeftLie,
+    altitude,
+    elevation,
+    increments: 5, // Fixed at 5 increments to match current implementation
+  };
+
+  const response = await fetch(`${urlBase}/api/analyze-club-shot`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to analyze shot");
+  }
+
+  return response.json();
+}
+
+export interface ClubInfo {
+  name: string;
+}
+
+// Cache for clubs and materials
+let clubsCache: ClubInfo[] | null = null;
+let materialsCache: MaterialInfo[] | null = null;
+
+export async function getClubs(): Promise<ClubInfo[]> {
+  // Return cached data if available
+  if (clubsCache) {
+    return clubsCache;
+  }
+
+  const response = await fetch(`${urlBase}/api/clubs`);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch clubs");
+  }
+
+  const clubs = await response.json();
+  clubsCache = clubs; // Store in cache
+  return clubs;
+}
+
+export interface MaterialInfo {
+  name: string;
+  title: string;
+}
+
+export async function getMaterials(): Promise<MaterialInfo[]> {
+  // Return cached data if available
+  if (materialsCache) {
+    return materialsCache;
+  }
+
+  const response = await fetch(`${urlBase}/api/materials`);
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch materials");
+  }
+
+  const materials = await response.json();
+  materialsCache = materials; // Store in cache
+  return materials;
+}

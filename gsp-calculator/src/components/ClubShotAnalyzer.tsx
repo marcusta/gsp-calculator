@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,15 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { clubRanges, clubNames } from "@/trajectory";
-import { PhyMatList } from "@/material";
-import {
-  getRoughSpeedPenalty,
-  getRoughSpinPenalty,
-  getRoughVLAPenalty,
-  getAltitudeModifier,
-  getElevationDistanceModifier,
-} from "@/penalty";
 import { Info } from "lucide-react";
 import {
   Tooltip,
@@ -24,205 +15,76 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getCarryDataFromServer, type CarryData } from "@/api";
+import {
+  analyzeClubShot,
+  type ShotIncrementResult,
+  getClubs,
+  type ClubInfo,
+  getMaterials,
+  type MaterialInfo,
+} from "@/api";
 import { Switch } from "@/components/ui/switch";
 import { DistanceUnit, convertMetersToYards } from "@/types/units";
 import { Input } from "@/components/ui/input";
-import {
-  getModifiedLieVla,
-  calculateOfflineDeviation,
-} from "@/lie-calculation";
-import { formatMaterialNameForUI } from "../material";
-
-interface CarryResult {
-  ballSpeed: number;
-  spin: number;
-  vla: number;
-  rawCarry: number;
-  estimatedCarry: number;
-  offlineDeviation: number;
-  modifiers: {
-    speedPenalty: number;
-    spinPenalty: number;
-    vlaPenalty: number;
-  };
-}
-
-function calculateAdjustedCarry(
-  baseCarry: number,
-  altitude: string,
-  elevationDiff: string,
-  unit: DistanceUnit,
-  ballSpeed: number,
-  spin: number,
-  vla: number
-): number {
-  const altitudeModifier = getAltitudeModifier(parseFloat(altitude) || 0);
-  const elevationInMeters =
-    unit === "yards"
-      ? convertMetersToYards(parseFloat(elevationDiff) || 0)
-      : parseFloat(elevationDiff) || 0;
-
-  const elevationEffect = getElevationDistanceModifier(
-    baseCarry,
-    elevationInMeters,
-    ballSpeed,
-    spin,
-    vla
-  );
-
-  const adjustedCarry = baseCarry * altitudeModifier + elevationEffect;
-
-  return unit === "yards" ? convertMetersToYards(adjustedCarry) : adjustedCarry;
-}
-
-function formatCarryDistance(
-  result: CarryResult,
-  altitude: string,
-  elevationDiff: string,
-  unit: DistanceUnit
-): {
-  adjustedCarry: number;
-  elevationEffect: number;
-} {
-  const adjustedBallSpeed = result.ballSpeed * result.modifiers.speedPenalty;
-  const adjustedSpin = result.spin * result.modifiers.spinPenalty;
-
-  const elevationInMeters =
-    unit === "yards"
-      ? convertMetersToYards(parseFloat(elevationDiff) || 0)
-      : parseFloat(elevationDiff) || 0;
-
-  const elevationEffect = getElevationDistanceModifier(
-    result.estimatedCarry,
-    elevationInMeters,
-    adjustedBallSpeed,
-    adjustedSpin,
-    result.vla
-  );
-
-  const adjustedCarry = calculateAdjustedCarry(
-    result.estimatedCarry,
-    altitude,
-    elevationDiff,
-    unit,
-    adjustedBallSpeed,
-    adjustedSpin,
-    result.vla
-  );
-
-  return {
-    adjustedCarry,
-    elevationEffect:
-      unit === "yards"
-        ? convertMetersToYards(elevationEffect)
-        : elevationEffect,
-  };
-}
 
 export function ClubShotAnalyzer() {
-  const [clubIndex, setClubIndex] = useState<number>(5); // Default to 7 iron
-  const [materialIndex, setMaterialIndex] = useState<number>(1);
-  const [results, setResults] = useState<CarryResult[] | null>(null);
+  const [club, setClub] = useState<string>("7 Iron"); // Default to 7 iron
+  const [clubs, setClubs] = useState<ClubInfo[]>([]);
+  const [material, setMaterial] = useState<string>("fairway");
+  const [results, setResults] = useState<(ShotIncrementResult | null)[] | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
   const [rightLeftLie, setRightLeftLie] = useState<string>("0");
   const [altitude, setAltitude] = useState<string>("0");
-  const [elevationDiff, setElevationDiff] = useState<string>("0");
+  const [elevation, setElevation] = useState<string>("0");
+  const [materials, setMaterials] = useState<MaterialInfo[]>([]);
 
-  // Filter PhyMatList to only include materials that have entries in the penalty tables
-  const validMaterialIndices = [18, 2, 1, 3, 4, 6, 11, 12, 13, 16, 17];
-  const validMaterials = validMaterialIndices.map((index) => ({
-    index,
-    name: PhyMatList[index],
-  }));
+  // Update useEffect to remove dependency
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [clubList, materialList] = await Promise.all([
+          getClubs(),
+          getMaterials(),
+        ]);
 
-  const calculateCarry = async (
-    ballSpeed: number,
-    spin: number,
-    vla: number
-  ): Promise<CarryData> => {
-    console.log("calculateCarry by getting from server", ballSpeed, spin, vla);
-    return await getCarryDataFromServer(ballSpeed, spin, vla);
-  };
+        setClubs(clubList);
+        setMaterials(materialList);
+
+        // Set default club if current selection isn't in the list
+        if (!clubList.some((c) => c.name === club)) {
+          setClub(clubList[0]?.name ?? "");
+        }
+        // Set default material if current selection isn't in the list
+        if (!materialList.some((m) => m.name === material)) {
+          setMaterial(materialList[0]?.name ?? "");
+        }
+      } catch (err) {
+        console.error("Failed to load initial data:", err);
+        setError("Failed to load clubs and materials");
+      }
+    };
+
+    loadData();
+  }, []); // Empty dependency array since we're caching
 
   const handleCalculate = async () => {
     setLoading(true);
     setError(null);
     try {
-      const club = clubRanges[clubIndex];
-      const speedRange = club.speedMax - club.speedMin;
-      const avgSpin = (club.spinMax + club.spinMin) / 2;
-      const avgVLA = (club.vlaMax + club.vlaMin) / 2;
-
-      // Calculate for five different speeds instead of three
-      const speeds = [
-        club.speedMin,
-        club.speedMin + speedRange * 0.25, // 25% power
-        club.speedMin + speedRange * 0.5, // 50% power
-        club.speedMin + speedRange * 0.75, // 75% power
-        club.speedMax,
-      ];
-
-      const results = await Promise.all(
-        speeds.map(async (speed) => {
-          // Apply penalties
-          const speedPenalty = getRoughSpeedPenalty(
-            materialIndex,
-            speed,
-            avgVLA
-          );
-          const spinPenalty = getRoughSpinPenalty(materialIndex, speed, avgVLA);
-          const vlaPenalty = getRoughVLAPenalty(materialIndex, speed, avgVLA);
-
-          const adjustedSpeed = speed * speedPenalty;
-          const adjustedSpin = avgSpin * spinPenalty;
-
-          // Apply lie angle modifications to VLA
-          const baseVLA = avgVLA * vlaPenalty;
-          const modifiedVLA = getModifiedLieVla(
-            baseVLA,
-            validateLieInput(upDownLie)
-          );
-
-          // Get raw carry (without lie angle)
-          const rawCarry = await calculateCarry(speed, avgSpin, avgVLA);
-          // Get estimated carry with penalties and lie angle
-          const estimatedCarry = await calculateCarry(
-            adjustedSpeed,
-            adjustedSpin,
-            modifiedVLA
-          );
-
-          // Calculate offline deviation if there's a right/left lie angle
-          const offlineDeviation =
-            validateLieInput(rightLeftLie) !== 0
-              ? calculateOfflineDeviation(
-                  modifiedVLA,
-                  validateLieInput(rightLeftLie),
-                  estimatedCarry.Carry
-                )
-              : 0;
-
-          return {
-            ballSpeed: speed,
-            spin: avgSpin,
-            vla: modifiedVLA,
-            rawCarry: rawCarry.Carry,
-            estimatedCarry: estimatedCarry.Carry,
-            offlineDeviation,
-            modifiers: {
-              speedPenalty,
-              spinPenalty,
-              vlaPenalty,
-            },
-          };
-        })
+      const response = await analyzeClubShot(
+        club,
+        material,
+        validateLieInput(upDownLie),
+        validateLieInput(rightLeftLie),
+        validateLieInput(elevation),
+        validateLieInput(altitude)
       );
-
-      setResults(results);
+      setResults(response.results);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -230,14 +92,14 @@ export function ClubShotAnalyzer() {
     }
   };
 
-  const calculatePenaltyPercentage = (raw: number, withPenalty: number) => {
-    const reduction = ((raw - withPenalty) / raw) * 100;
-    return reduction.toFixed(1);
-  };
-
   const validateLieInput = (value: string): number => {
     const num = parseFloat(value);
     return isNaN(num) ? 0 : num;
+  };
+
+  const formatDistance = (meters: number): string => {
+    const distance = unit === "yards" ? convertMetersToYards(meters) : meters;
+    return `${distance.toFixed(1)}${unit}`;
   };
 
   return (
@@ -259,17 +121,14 @@ export function ClubShotAnalyzer() {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="club">Club</Label>
-            <Select
-              value={clubIndex.toString()}
-              onValueChange={(value) => setClubIndex(Number(value))}
-            >
+            <Select value={club} onValueChange={setClub}>
               <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select club" />
               </SelectTrigger>
               <SelectContent>
-                {clubNames.map((name, index) => (
-                  <SelectItem key={index} value={index.toString()}>
-                    {name}
+                {clubs.map((club) => (
+                  <SelectItem key={club.name} value={club.name}>
+                    {club.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -278,17 +137,14 @@ export function ClubShotAnalyzer() {
 
           <div className="space-y-2">
             <Label htmlFor="material">Lie/Material</Label>
-            <Select
-              value={materialIndex.toString()}
-              onValueChange={(value) => setMaterialIndex(Number(value))}
-            >
+            <Select value={material} onValueChange={setMaterial}>
               <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select material" />
               </SelectTrigger>
               <SelectContent>
-                {validMaterials.map(({ index, name }) => (
-                  <SelectItem key={index} value={index.toString()}>
-                    {formatMaterialNameForUI(name)}
+                {materials.map((mat) => (
+                  <SelectItem key={mat.name} value={mat.name}>
+                    {mat.title}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -373,7 +229,7 @@ export function ClubShotAnalyzer() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="elevation-diff">
+          <Label htmlFor="elevation">
             Elevation Difference ({unit})
             <TooltipProvider>
               <Tooltip>
@@ -391,10 +247,10 @@ export function ClubShotAnalyzer() {
             </TooltipProvider>
           </Label>
           <Input
-            id="elevation-diff"
+            id="elevation"
             type="number"
-            value={elevationDiff}
-            onChange={(e) => setElevationDiff(e.target.value)}
+            value={elevation}
+            onChange={(e) => setElevation(e.target.value)}
             className="bg-background"
           />
         </div>
@@ -407,120 +263,89 @@ export function ClubShotAnalyzer() {
 
         {results && (
           <div className="mt-4 space-y-4">
-            <h3 className="font-semibold">
-              Shot Parameters for {clubNames[clubIndex]}:
-            </h3>
+            <h3 className="font-semibold">Shot Parameters for {club}:</h3>
 
-            {results.map((result, index) => (
-              <div key={index} className="border p-4 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-semibold mb-2">
-                    {index === 0
-                      ? "Minimum"
-                      : index === 1
-                      ? "Quarter"
-                      : index === 2
-                      ? "Half"
-                      : index === 3
-                      ? "Three-Quarter"
-                      : "Maximum"}{" "}
-                    Power
-                  </h4>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-4 w-4 text-muted-foreground -translate-y-1" />
-                      </TooltipTrigger>
-                      <TooltipContent className="space-y-2 bg-blue-800">
-                        <p className="font-semibold">Applied Modifiers:</p>
-                        <p>
-                          Speed:{" "}
-                          {((1 - result.modifiers.speedPenalty) * 100).toFixed(
-                            1
-                          )}
-                          % reduction
+            {results.map(
+              (result, index) =>
+                result && (
+                  <div key={index} className="border p-4 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold mb-2">
+                        {index === 0
+                          ? "Minimum"
+                          : index === 1
+                          ? "Quarter"
+                          : index === 2
+                          ? "Half"
+                          : index === 3
+                          ? "Three-Quarter"
+                          : "Maximum"}{" "}
+                        Power
+                      </h4>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="h-4 w-4 text-muted-foreground -translate-y-1" />
+                          </TooltipTrigger>
+                          <TooltipContent className="space-y-2 bg-blue-800">
+                            <p className="font-semibold">Applied Modifiers:</p>
+                            <p>
+                              Speed:{" "}
+                              {(
+                                (1 - result.modifiers.speedPenalty) *
+                                100
+                              ).toFixed(1)}
+                              % reduction
+                            </p>
+                            <p>
+                              Spin:{" "}
+                              {(
+                                (result.modifiers.spinPenalty - 1) *
+                                100
+                              ).toFixed(1)}
+                              % increase
+                            </p>
+                            <p>
+                              Launch Angle:{" "}
+                              {(
+                                (result.modifiers.vlaPenalty - 1) *
+                                100
+                              ).toFixed(1)}
+                              % change
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <p>Ball Speed: {result.ballSpeed.toFixed(1)} mph</p>
+                    <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
+                    <p>Launch Angle: {result.vla.toFixed(1)}°</p>
+                    <div className="mt-2">
+                      <p>Raw Carry: {formatDistance(result.rawCarry)}</p>
+                      <p>
+                        With Penalties: {formatDistance(result.estimatedCarry)}
+                      </p>
+                      <p>With Environment: {formatDistance(result.envCarry)}</p>
+                      <p className="text-red-500">
+                        Carry Reduced by{" "}
+                        {(
+                          (1 - result.estimatedCarry / result.rawCarry) *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </p>
+                      {result.offlineDeviation !== 0 && (
+                        <p className="text-yellow-500">
+                          Ball will travel{" "}
+                          {formatDistance(Math.abs(result.offlineDeviation))}{" "}
+                          {result.offlineDeviation > 0 ? "right" : "left"} of
+                          target
                         </p>
-                        <p>
-                          Spin:{" "}
-                          {((result.modifiers.spinPenalty - 1) * 100).toFixed(
-                            1
-                          )}
-                          % increase
-                        </p>
-                        <p>
-                          Launch Angle:{" "}
-                          {((result.modifiers.vlaPenalty - 1) * 100).toFixed(1)}
-                          % change
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <p>Ball Speed: {result.ballSpeed.toFixed(1)} mph</p>
-                <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
-                <p>Launch Angle: {result.vla.toFixed(1)}°</p>
-                <div className="mt-2">
-                  <p>
-                    Raw Carry:{" "}
-                    {(unit === "yards"
-                      ? convertMetersToYards(result.rawCarry)
-                      : result.rawCarry
-                    ).toFixed(1)}
-                    {unit}
-                  </p>
-                  <p>
-                    With Penalties:{" "}
-                    {formatCarryDistance(
-                      result,
-                      altitude,
-                      elevationDiff,
-                      unit
-                    ).adjustedCarry.toFixed(1)}
-                    {unit}
-                  </p>
-                  {parseFloat(elevationDiff) !== 0 && (
-                    <p>
-                      Elevation Effect:{" "}
-                      {formatCarryDistance(
-                        result,
-                        altitude,
-                        elevationDiff,
-                        unit
-                      ).elevationEffect.toFixed(1)}{" "}
-                      {unit}{" "}
-                      {formatCarryDistance(
-                        result,
-                        altitude,
-                        elevationDiff,
-                        unit
-                      ).elevationEffect > 0
-                        ? "shorter"
-                        : "longer"}
-                    </p>
-                  )}
-                  <p className="text-red-500">
-                    Carry Reduced by{" "}
-                    {calculatePenaltyPercentage(
-                      result.rawCarry,
-                      result.estimatedCarry
-                    )}
-                    %
-                  </p>
-                  {result.offlineDeviation !== 0 && (
-                    <p className="text-yellow-500">
-                      Ball will travel{" "}
-                      {unit === "yards"
-                        ? convertMetersToYards(
-                            Math.abs(result.offlineDeviation)
-                          ).toFixed(1)
-                        : Math.abs(result.offlineDeviation).toFixed(1)}
-                      {unit} {result.offlineDeviation > 0 ? "right" : "left"} of
-                      target
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
+                      )}
+                    </div>
+                  </div>
+                )
+            )}
           </div>
         )}
       </div>

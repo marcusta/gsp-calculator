@@ -84,9 +84,11 @@ export class TrajectoryService {
     );
 
     console.log(
-      "Finding closest trajectory for",
+      "Finding closest trajectory for BS: ",
       ballSpeed,
+      "SPIN: ",
       spin,
+      "VLA: ",
       vla,
       " result: ",
       interpolatedCarry

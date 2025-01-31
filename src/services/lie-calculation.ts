@@ -11,8 +11,11 @@ export function calculateHLAModification(vla: number) {
   return lieVLAtoHLA[lieIndex];
 }
 
-export function getModifiedLieVla(vla: number, lieDegrees: number) {
+export function getModifiedLieVla(vla: number, lieDegrees?: number) {
   const vlaModification = calculateVLAModification(vla);
+  if (lieDegrees === 0 || !lieDegrees) {
+    return vla + vlaModification;
+  }
   return vla + vlaModification * lieDegrees;
 }
 

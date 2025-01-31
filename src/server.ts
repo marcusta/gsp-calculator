@@ -1,9 +1,11 @@
 import { readFile } from "fs/promises";
 import { Hono, type Context } from "hono";
+import { clubs } from "./services/club-ranges";
 import { TrajectoryService } from "./services/database.service";
+import { analyzeShotWithClub } from "./services/shot-analyzer.service";
 import { ShotCalculator } from "./services/shot-calculator";
 import { SuggestShotService } from "./services/suggest-shot.service";
-import type { SuggestShotRequest } from "./types";
+import type { ShotAnalyzerRequest, SuggestShotRequest } from "./types";
 
 const app = new Hono();
 const trajectoryService = new TrajectoryService();
@@ -12,17 +14,17 @@ const shotCalculator = new ShotCalculator(trajectoryService);
 
 app.get("/api/materials", async (c) => {
   return c.json([
-    { name: "semirough", title: "Semi Rough" },
     { name: "fairway", title: "Fairway" },
-    { name: "tee", title: "Tee" },
     { name: "rough", title: "Rough" },
-    { name: "earth", title: "Earth" },
-    { name: "pinestraw", title: "Pine Straw" },
-    { name: "leaves", title: "Leaves" },
-    { name: "deeprough", title: "Deep Rough" },
-    { name: "concrete", title: "Concrete" },
-    { name: "stone", title: "Stone" },
     { name: "sand", title: "Sand" },
+    { name: "deeprough", title: "Deep Rough" },
+    { name: "semirough", title: "Semi Rough" },
+    { name: "pinestraw", title: "Pine Straw" },
+    { name: "concrete", title: "Concrete" },
+    { name: "tee", title: "Tee" },
+    { name: "earth", title: "Earth" },
+    { name: "leaves", title: "Leaves" },
+    { name: "stone", title: "Stone" },
   ]);
 });
 
@@ -78,6 +80,34 @@ app.post("/api/suggestShot", async (c) => {
     return c.json({ error: "No suitable shot found" }, 404);
   }
   return c.json(suggestion, 200);
+});
+
+app.post("/api/analyze-club-shot", async (c) => {
+  try {
+    const request: ShotAnalyzerRequest = await c.req.json();
+
+    // Validate inputs
+    if (!request.club || !clubs.some((c) => c.name === request.club)) {
+      return c.json({ error: "Invalid club name" }, 400);
+    }
+    if (request.increments < 1 || request.increments > 7) {
+      return c.json({ error: "Increments must be between 1 and 7" }, 400);
+    }
+    if (!request.material) {
+      return c.json({ error: "Material is required" }, 400);
+    }
+
+    const result = await analyzeShotWithClub(request, trajectoryService);
+    return c.json(result);
+  } catch (error) {
+    console.error("Error in analyze-club-shot:", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Add new endpoint for clubs
+app.get("/api/clubs", (c) => {
+  return c.json(clubs.map((club) => ({ name: club.name })));
 });
 
 // Add a simple health check endpoint

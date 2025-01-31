@@ -2,17 +2,11 @@
  * A list of known material names by index.
  */
 export const PhyMatList: string[] = [
-  "ball",
   "rough",
   "fairway",
   "deeprough",
   "concrete",
-  "green",
   "earth",
-  "dropzone",
-  "holecup",
-  "holelip",
-  "pin",
   "sand",
   "semirough",
   "stone",
@@ -22,9 +16,6 @@ export const PhyMatList: string[] = [
   "leaves",
   "tee",
   "none",
-  "teemarker",
-  "Tree",
-  "timber",
 ];
 
 /**

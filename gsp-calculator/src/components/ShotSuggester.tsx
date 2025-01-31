@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import {
   convertMetersToYards,
   convertYardsToMeters,
 } from "@/types/units";
-import { suggestShot } from "@/api";
+import { suggestShot, getMaterials, type MaterialInfo } from "@/api";
 
 interface ShotSuggestion {
   club: string;
@@ -30,21 +30,6 @@ interface ShotSuggestion {
   rawCarry: number;
   offlineDeviation: number;
 }
-
-// Add mapping between indices and material names
-const validMaterials = [
-  { name: "fairway", title: "Fairway" },
-  { name: "rough", title: "Rough" },
-  { name: "sand", title: "Sand" },
-  { name: "deeprough", title: "Deep rough" },
-  { name: "semirough", title: "Semi rough" },
-  { name: "tee", title: "Tee" },
-  { name: "pinestraw", title: "Pine straw" },
-  { name: "concrete", title: "Concrete" },
-  { name: "earth", title: "Earth" },
-  { name: "leaves", title: "Leaves" },
-  { name: "stone", title: "Stone" },
-];
 
 export function ShotSuggester() {
   const [targetCarry, setTargetCarry] = useState<string>("");
@@ -57,6 +42,26 @@ export function ShotSuggester() {
   const [altitude, setAltitude] = useState<string>("0");
   const [elevationDiff, setElevationDiff] = useState<string>("0");
   const [material, setMaterial] = useState<string>("");
+  const [materials, setMaterials] = useState<MaterialInfo[]>([]);
+
+  // Load materials on mount
+  useEffect(() => {
+    const loadMaterials = async () => {
+      try {
+        const materialList = await getMaterials();
+        setMaterials(materialList);
+        // Set default material if none selected
+        if (!material && materialList.length > 0) {
+          setMaterial(materialList[0].name);
+        }
+      } catch (err) {
+        console.error("Failed to load materials:", err);
+        setError("Failed to load materials");
+      }
+    };
+
+    loadMaterials();
+  }, [material, materials]); // Empty dependency array since we're caching
 
   const handleCalculate = async () => {
     setLoading(true);
@@ -138,9 +143,9 @@ export function ShotSuggester() {
                 <SelectValue placeholder="Select material" />
               </SelectTrigger>
               <SelectContent>
-                {validMaterials.map(({ name, title }) => (
-                  <SelectItem key={name} value={name}>
-                    {title}
+                {materials.map((mat) => (
+                  <SelectItem key={mat.name} value={mat.name}>
+                    {mat.title}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -58,3 +58,34 @@ export interface CalculateCarryResponse {
   spinPenalty: number;
   vlaPenalty: number;
 }
+
+export interface ShotAnalyzerRequest {
+  club: string;
+  material: string;
+  upDownLie: number;
+  rightLeftLie: number;
+  altitude: number;
+  elevation: number;
+  increments: number;
+}
+
+export interface ShotIncrementResult {
+  power: number; // 0-1 representing percentage of max power
+  ballSpeed: number;
+  spin: number;
+  vla: number;
+  rawCarry: number;
+  estimatedCarry: number;
+  envCarry: number;
+  offlineDeviation: number;
+  modifiers: {
+    speedPenalty: number;
+    spinPenalty: number;
+    vlaPenalty: number;
+  };
+}
+
+export interface ShotAnalyzerResponse {
+  request: ShotAnalyzerRequest;
+  results: (ShotIncrementResult | null)[];
+}

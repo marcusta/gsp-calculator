@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,8 +8,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PhyMatList } from "@/material";
-import { calculateCarry, type CalculateCarryResponse } from "@/api";
+import {
+  calculateCarry,
+  type CalculateCarryResponse,
+  getMaterials,
+  type MaterialInfo,
+} from "@/api";
 import { Switch } from "@/components/ui/switch";
 import { DistanceUnit, convertMetersToYards } from "@/types/units";
 
@@ -20,13 +24,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
-import { formatMaterialNameForUI } from "../material";
 
 export function BallPhysicsCalculator() {
   const [speed, setSpeed] = useState<number>(0);
   const [vla, setVLA] = useState<number>(0);
   const [spin, setSpin] = useState<number>(0);
-  const [materialIndex, setMaterialIndex] = useState<number>(1);
+  const [material, setMaterial] = useState<string>("fairway");
+  const [materials, setMaterials] = useState<MaterialInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [unit, setUnit] = useState<DistanceUnit>("meters");
   const [upDownLie, setUpDownLie] = useState<string>("0");
@@ -34,13 +38,25 @@ export function BallPhysicsCalculator() {
   const [altitude, setAltitude] = useState<string>("0");
   const [elevationDiff, setElevationDiff] = useState<string>("0");
   const [result, setResult] = useState<CalculateCarryResponse | null>(null);
+  const [_, setError] = useState<string | null>(null);
 
-  // Filter PhyMatList to only include materials that have entries in the penalty tables
-  const validMaterialIndices = [18, 2, 1, 3, 4, 6, 11, 12, 13, 16, 17];
-  const validMaterials = validMaterialIndices.map((index) => ({
-    index,
-    name: PhyMatList[index],
-  }));
+  useEffect(() => {
+    const loadMaterials = async () => {
+      try {
+        const materialList = await getMaterials();
+        setMaterials(materialList);
+        // Set default material if current selection isn't in the list
+        if (!materialList.some((m) => m.name === material)) {
+          setMaterial(materialList[0]?.name ?? "");
+        }
+      } catch (err) {
+        console.error("Failed to load materials:", err);
+        setError("Failed to load materials");
+      }
+    };
+
+    loadMaterials();
+  }, [material, materials]); // Empty dependency array since we're caching
 
   const handleCalculate = async () => {
     if (speed && vla && spin) {
@@ -50,7 +66,7 @@ export function BallPhysicsCalculator() {
           ballSpeed: speed,
           spin,
           vla,
-          material: PhyMatList[materialIndex],
+          material,
           upDownLie: parseFloat(upDownLie) || 0,
           rightLeftLie: parseFloat(rightLeftLie) || 0,
           elevation: parseFloat(elevationDiff) || 0,
@@ -118,17 +134,14 @@ export function BallPhysicsCalculator() {
 
           <div className="space-y-2">
             <Label htmlFor="material">Lie/Material</Label>
-            <Select
-              value={materialIndex.toString()}
-              onValueChange={(value) => setMaterialIndex(Number(value))}
-            >
+            <Select value={material} onValueChange={setMaterial}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Select material" />
               </SelectTrigger>
               <SelectContent>
-                {validMaterials.map(({ index, name }) => (
-                  <SelectItem key={index} value={index.toString()}>
-                    {formatMaterialNameForUI(name)}
+                {materials.map((mat) => (
+                  <SelectItem key={mat.name} value={mat.name}>
+                    {mat.title}
                   </SelectItem>
                 ))}
               </SelectContent>
