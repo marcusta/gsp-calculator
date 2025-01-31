@@ -10,7 +10,7 @@ import { useState } from "react";
 import { UnitToggle } from "./UnitToggle";
 
 export function BallPhysicsTools() {
-  const [currentTab, setCurrentTab] = useState("calculator");
+  const [currentTab, setCurrentTab] = useState("shot-suggester");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const tabs = [
