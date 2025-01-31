@@ -4,35 +4,101 @@ import { PuttCalculator } from "./PuttCalculator";
 import { PuttingDiagram } from "./PuttingDiagram";
 import { ShotSuggester } from "./ShotSuggester";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
+import { Menu } from "lucide-react";
+import { Button } from "./ui/button";
+import { useState } from "react";
 
 export function BallPhysicsTools() {
+  const [currentTab, setCurrentTab] = useState("calculator");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const tabs = [
+    { value: "calculator", label: "Ball Physics" },
+    { value: "club-analyzer", label: "Club Analysis" },
+    { value: "shot-suggester", label: "Shot Suggester" },
+    { value: "putting", label: "Putting" },
+    { value: "putting-diagram", label: "Putting Diagram" },
+  ];
+
   return (
-    <Tabs defaultValue="calculator" className="w-full">
-      <div className="w-full overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
-        <TabsList className="w-max min-w-full flex-nowrap">
-          <TabsTrigger value="calculator">Ball Physics</TabsTrigger>
-          <TabsTrigger value="club-analyzer">Club Analysis</TabsTrigger>
-          <TabsTrigger value="shot-suggester">Shot Suggester</TabsTrigger>
-          <TabsTrigger value="putting">Putting</TabsTrigger>
-          <TabsTrigger value="putting-diagram">Putting Diagram</TabsTrigger>
-        </TabsList>
+    <div className="w-full">
+      {/* Mobile Menu */}
+      <div className="sm:hidden">
+        <div className="p-4 border-b border-white/10">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-white w-full flex justify-between items-center"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            <span>{tabs.find((tab) => tab.value === currentTab)?.label}</span>
+            <Menu className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Mobile Menu Dropdown */}
+        {isMenuOpen && (
+          <div className="absolute z-50 w-full bg-slate-800 border-b border-white/10 shadow-lg">
+            {tabs.map((tab) => (
+              <button
+                key={tab.value}
+                className={`w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors
+                  ${
+                    currentTab === tab.value
+                      ? "bg-slate-700 text-white"
+                      : "text-slate-200"
+                  }`}
+                onClick={() => {
+                  setCurrentTab(tab.value);
+                  setIsMenuOpen(false);
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Mobile Content */}
+        <div className="p-4">
+          {currentTab === "calculator" && <BallPhysicsCalculator />}
+          {currentTab === "club-analyzer" && <ClubShotAnalyzer />}
+          {currentTab === "shot-suggester" && <ShotSuggester />}
+          {currentTab === "putting" && <PuttCalculator />}
+          {currentTab === "putting-diagram" && <PuttingDiagram />}
+        </div>
       </div>
 
-      <TabsContent value="calculator">
-        <BallPhysicsCalculator />
-      </TabsContent>
-      <TabsContent value="club-analyzer">
-        <ClubShotAnalyzer />
-      </TabsContent>
-      <TabsContent value="shot-suggester">
-        <ShotSuggester />
-      </TabsContent>
-      <TabsContent value="putting">
-        <PuttCalculator />
-      </TabsContent>
-      <TabsContent value="putting-diagram">
-        <PuttingDiagram />
-      </TabsContent>
-    </Tabs>
+      {/* Desktop Tabs */}
+      <div className="hidden sm:block">
+        <Tabs value={currentTab} onValueChange={setCurrentTab}>
+          <div className="w-full overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+            <TabsList className="w-max min-w-full flex-nowrap">
+              {tabs.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+
+          <TabsContent value="calculator">
+            <BallPhysicsCalculator />
+          </TabsContent>
+          <TabsContent value="club-analyzer">
+            <ClubShotAnalyzer />
+          </TabsContent>
+          <TabsContent value="shot-suggester">
+            <ShotSuggester />
+          </TabsContent>
+          <TabsContent value="putting">
+            <PuttCalculator />
+          </TabsContent>
+          <TabsContent value="putting-diagram">
+            <PuttingDiagram />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
   );
 }
