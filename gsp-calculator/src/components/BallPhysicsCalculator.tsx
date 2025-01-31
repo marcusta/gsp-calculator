@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -14,19 +15,104 @@ import {
   getMaterials,
   type MaterialInfo,
 } from "@/api";
-import { Switch } from "@/components/ui/switch";
-import { DistanceUnit, convertMetersToYards } from "@/types/units";
-
+import { convertMetersToYards } from "@/types/units";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import { Info, Plus, Minus } from "lucide-react";
 import { useUnit } from "../contexts/UnitContext";
 
+// Reuse the same components from other calculators
+interface QuickSelectButtonProps {
+  value: number;
+  onClick: (value: number) => void;
+  label: string;
+}
+
+function QuickSelectButton({ value, onClick, label }: QuickSelectButtonProps) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="px-2 py-1 h-8"
+      onClick={() => onClick(value)}
+    >
+      {label}
+    </Button>
+  );
+}
+
+interface NumberInputWithControlsProps {
+  id: string;
+  value: string | number;
+  onChange: (value: string) => void;
+  increment: number;
+  quickSelectValues?: Array<{ value: number; label: string }>;
+}
+
+function NumberInputWithControls({
+  id,
+  value,
+  onChange,
+  increment,
+  quickSelectValues,
+}: NumberInputWithControlsProps) {
+  const handleIncrement = (amount: number) => {
+    const currentValue = parseFloat(value.toString()) || 0;
+    onChange((currentValue + amount).toString());
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2 h-11">
+        <Input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="bg-background h-11"
+        />
+        <div className="flex gap-1 flex-shrink-0">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handleIncrement(-increment)}
+            className="h-11 aspect-square"
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handleIncrement(increment)}
+            className="h-11 aspect-square"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      {quickSelectValues && (
+        <div className="flex gap-1 flex-wrap">
+          {quickSelectValues.map(({ value, label }) => (
+            <QuickSelectButton
+              key={value}
+              value={value}
+              onClick={(v) => onChange(v.toString())}
+              label={label}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BallPhysicsCalculator() {
+  const { unitSystem } = useUnit();
   const [speed, setSpeed] = useState<number>(0);
   const [vla, setVLA] = useState<number>(0);
   const [spin, setSpin] = useState<number>(0);
@@ -38,15 +124,13 @@ export function BallPhysicsCalculator() {
   const [altitude, setAltitude] = useState<string>("0");
   const [elevationDiff, setElevationDiff] = useState<string>("0");
   const [result, setResult] = useState<CalculateCarryResponse | null>(null);
-  const [_, setError] = useState<string | null>(null);
-  const { unitSystem } = useUnit();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadMaterials = async () => {
       try {
         const materialList = await getMaterials();
         setMaterials(materialList);
-        // Set default material if current selection isn't in the list
         if (!materialList.some((m) => m.name === material)) {
           setMaterial(materialList[0]?.name ?? "");
         }
@@ -57,11 +141,12 @@ export function BallPhysicsCalculator() {
     };
 
     loadMaterials();
-  }, [material, materials]); // Empty dependency array since we're caching
+  }, []); // Empty dependency array since we're caching
 
   const handleCalculate = async () => {
     if (speed && vla && spin) {
       setIsLoading(true);
+      setError(null);
       try {
         const calculatedResult = await calculateCarry({
           ballSpeed: speed,
@@ -74,8 +159,8 @@ export function BallPhysicsCalculator() {
           altitude: parseFloat(altitude) || 0,
         });
         setResult(calculatedResult);
-      } catch (error) {
-        console.error("Error calculating carry:", error);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred");
         setResult(null);
       } finally {
         setIsLoading(false);
@@ -92,53 +177,33 @@ export function BallPhysicsCalculator() {
   };
 
   return (
-    <div className="p-6 min-h-[600px]">
-      <h2 className="text-2xl font-bold mb-6">Ball Physics Calculator</h2>
-
+    <div className="p-4 min-h-[600px] max-w-2xl mx-auto">
       <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-4 max-w-xl">
-          <div className="space-y-2">
-            <Label htmlFor="speed">Ball Speed</Label>
-            <Input
+        <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+          {/* First row */}
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="speed">Ball Speed (mph)</Label>
+            </div>
+            <NumberInputWithControls
               id="speed"
-              type="number"
-              min="0"
-              max="150"
               value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-              className="w-40"
+              onChange={(v) => setSpeed(Number(v))}
+              increment={1}
+              quickSelectValues={[
+                { value: 100, label: "100" },
+                { value: 125, label: "125" },
+                { value: 150, label: "150" },
+              ]}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="vla">VLA</Label>
-            <Input
-              id="vla"
-              type="number"
-              min="0"
-              max="45"
-              value={vla}
-              onChange={(e) => setVLA(Number(e.target.value))}
-              className="w-40"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="spin">Spin</Label>
-            <Input
-              id="spin"
-              type="number"
-              min="0"
-              value={spin}
-              onChange={(e) => setSpin(Number(e.target.value))}
-              className="w-40"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="material">Lie/Material</Label>
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="material">Lie/Material</Label>
+            </div>
             <Select value={material} onValueChange={setMaterial}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="bg-background h-11">
                 <SelectValue placeholder="Select material" />
               </SelectTrigger>
               <SelectContent>
@@ -151,13 +216,109 @@ export function BallPhysicsCalculator() {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="altitude">
-              Altitude (feet)
+          {/* Second row */}
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="vla">Launch Angle (°)</Label>
+            </div>
+            <NumberInputWithControls
+              id="vla"
+              value={vla}
+              onChange={(v) => setVLA(Number(v))}
+              increment={0.5}
+              quickSelectValues={[
+                { value: 15, label: "15°" },
+                { value: 20, label: "20°" },
+                { value: 25, label: "25°" },
+              ]}
+            />
+          </div>
+
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="spin">Spin Rate (rpm)</Label>
+            </div>
+            <NumberInputWithControls
+              id="spin"
+              value={spin}
+              onChange={(v) => setSpin(Number(v))}
+              increment={100}
+              quickSelectValues={[
+                { value: 2000, label: "2k" },
+                { value: 4000, label: "4k" },
+                { value: 6000, label: "6k" },
+                { value: 8000, label: "8k" },
+              ]}
+            />
+          </div>
+
+          {/* Third row */}
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="updown-lie">Up/Down Slope</Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
-                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Positive = uphill lie
+                    <br />
+                    Negative = downhill lie
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <NumberInputWithControls
+              id="updown-lie"
+              value={upDownLie}
+              onChange={setUpDownLie}
+              increment={1}
+              quickSelectValues={[
+                { value: -5, label: "-5°" },
+                { value: 0, label: "0°" },
+                { value: 5, label: "+5°" },
+              ]}
+            />
+          </div>
+
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="rightleft-lie">Right/Left Slope</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Positive = right slope
+                    <br />
+                    Negative = left slope
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <NumberInputWithControls
+              id="rightleft-lie"
+              value={rightLeftLie}
+              onChange={setRightLeftLie}
+              increment={1}
+              quickSelectValues={[
+                { value: -5, label: "-5°" },
+                { value: 0, label: "0°" },
+                { value: 5, label: "+5°" },
+              ]}
+            />
+          </div>
+
+          {/* Fourth row */}
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="altitude">Altitude (feet)</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </TooltipTrigger>
                   <TooltipContent>
                     Height above sea level.
@@ -166,160 +327,108 @@ export function BallPhysicsCalculator() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </Label>
-            <Input
+            </div>
+            <NumberInputWithControls
               id="altitude"
-              type="number"
               value={altitude}
-              onChange={(e) => setAltitude(e.target.value)}
-              className="w-40"
+              onChange={setAltitude}
+              increment={500}
+              quickSelectValues={[
+                { value: 0, label: "0" },
+                { value: 1000, label: "1000" },
+                { value: 2000, label: "2000" },
+              ]}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="elevation-diff">
-              Elevation Difference (
-              {unitSystem === "imperial" ? "yards" : "meters"})
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="elevation-diff">Elevation diff.</Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
-                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </TooltipTrigger>
                   <TooltipContent>
                     Height difference between ball and target.
                     <br />
-                    Positive = uphill
-                    <br />
-                    Negative = downhill
+                    Positive = uphill, Negative = downhill
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </Label>
-            <Input
+            </div>
+            <NumberInputWithControls
               id="elevation-diff"
-              type="number"
               value={elevationDiff}
-              onChange={(e) => setElevationDiff(e.target.value)}
-              className="w-40"
+              onChange={setElevationDiff}
+              increment={1}
+              quickSelectValues={[
+                { value: -10, label: "-10" },
+                { value: 0, label: "0" },
+                { value: 10, label: "+10" },
+              ]}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 max-w-md">
-          <div className="space-y-2">
-            <Label htmlFor="updown-lie">
-              Up/Down Slope (degrees)
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Positive value = uphill lie
-                    <br />
-                    Negative value = downhill lie
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <Input
-              id="updown-lie"
-              type="number"
-              value={upDownLie}
-              onChange={(e) => setUpDownLie(e.target.value)}
-              className="w-24"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="rightleft-lie">
-              Right/Left Slope (degrees)
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Positive value = right slope
-                    <br />
-                    Negative value = left slope
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <Input
-              id="rightleft-lie"
-              type="number"
-              value={rightLeftLie}
-              onChange={(e) => setRightLeftLie(e.target.value)}
-              className="w-24"
-            />
-          </div>
-        </div>
+        <Button
+          onClick={handleCalculate}
+          disabled={isLoading || !speed || !vla || !spin}
+          className="w-full h-12 text-lg"
+        >
+          {isLoading ? "Calculating..." : "Calculate Ball Physics"}
+        </Button>
 
-        <div className="mt-4 mb-4">
-          <button
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
-            onClick={handleCalculate}
-            disabled={isLoading || !speed || !vla || !spin}
-          >
-            {isLoading ? "Calculating..." : "Calculate Carry"}
-          </button>
-        </div>
+        {error && (
+          <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>
+        )}
 
         {result && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <p className="font-medium">Speed Modifier:</p>
-                <p>{result.speedPenalty.toFixed(3)}</p>
-              </div>
-              <div>
-                <p className="font-medium">Spin Modifier:</p>
-                <p>{result.spinPenalty.toFixed(3)}</p>
-              </div>
-              <div>
-                <p className="font-medium">VLA Modifier:</p>
-                <p>{result.vlaPenalty.toFixed(3)}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <p className="font-medium">Modified Speed:</p>
-                <p>{result.speedModified.toFixed(2)}</p>
-              </div>
-              <div>
-                <p className="font-medium">Modified Spin:</p>
-                <p>{result.spinModified.toFixed(2)}</p>
-              </div>
-              <div>
-                <p className="font-medium">Modified VLA:</p>
-                <p>{result.vlaModified.toFixed(2)}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="font-medium">Raw Carry:</p>
-                <p>{formatDistance(result.carryRaw)}</p>
-              </div>
-              <div>
-                <p className="font-medium">Modified Carry:</p>
-                <p>{formatDistance(result.carryModified)}</p>
-              </div>
-              <div>
-                <p className="font-medium">Final Carry:</p>
-                <p>{formatDistance(result.envCarry)}</p>
-              </div>
-              {result.offlineDeviation !== 0 && (
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg">Results:</h3>
+            <div className="border p-4 rounded-lg bg-background/50 space-y-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <p className="font-medium text-yellow-500">
-                    Ball will travel{" "}
-                    {formatDistance(Math.abs(result.offlineDeviation))}
-                    {result.offlineDeviation > 0 ? " right" : " left"} of target
-                  </p>
+                  <p className="font-medium">Speed Modifier:</p>
+                  <p>{result.speedPenalty.toFixed(3)}</p>
                 </div>
-              )}
+                <div>
+                  <p className="font-medium">Spin Modifier:</p>
+                  <p>{result.spinPenalty.toFixed(3)}</p>
+                </div>
+                <div>
+                  <p className="font-medium">VLA Modifier:</p>
+                  <p>{result.vlaPenalty.toFixed(3)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="font-medium">Modified Speed:</p>
+                  <p>{result.speedModified.toFixed(2)} mph</p>
+                </div>
+                <div>
+                  <p className="font-medium">Modified Spin:</p>
+                  <p>{result.spinModified.toFixed(0)} rpm</p>
+                </div>
+                <div>
+                  <p className="font-medium">Modified VLA:</p>
+                  <p>{result.vlaModified.toFixed(1)}°</p>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p>Raw Carry: {formatDistance(result.carryRaw)}</p>
+                <p>With Penalties: {formatDistance(result.carryModified)}</p>
+                <p>With Environment: {formatDistance(result.envCarry)}</p>
+                {result.offlineDeviation !== 0 && (
+                  <p className="text-yellow-500">
+                    Ball will travel{" "}
+                    {formatDistance(Math.abs(result.offlineDeviation))}{" "}
+                    {result.offlineDeviation > 0 ? "right" : "left"} of target
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
