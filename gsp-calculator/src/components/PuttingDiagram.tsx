@@ -15,8 +15,6 @@ import {
   Legend,
 } from "chart.js";
 import { useState } from "react";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { useUnit } from "../contexts/UnitContext";
 
 // Register ChartJS components
@@ -71,9 +69,10 @@ export function PuttingDiagram() {
       {
         label: `Ball Speed vs Distance (Stimp ${selectedStimp})`,
         data: smoothData.map((point) => point.speed),
-        borderColor: "rgb(59, 130, 246)",
-        backgroundColor: "rgba(59, 130, 246, 0.5)",
-        pointRadius: 2,
+        borderColor: "rgb(25, 99, 232)",
+        backgroundColor: "rgba(25, 99, 232, 0.1)",
+        borderWidth: 2,
+        pointRadius: 1,
         tension: 0.4,
       },
     ],
@@ -81,13 +80,25 @@ export function PuttingDiagram() {
 
   const options = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         position: "top" as const,
+        labels: {
+          color: "#fff",
+          font: {
+            size: 14,
+          },
+        },
       },
       title: {
         display: true,
         text: "Putting Speed vs Distance Relationship",
+        color: "#fff",
+        font: {
+          size: 16,
+          weight: "bold",
+        },
       },
     },
     scales: {
@@ -95,13 +106,30 @@ export function PuttingDiagram() {
         title: {
           display: true,
           text: `Distance (${unitSystem === "imperial" ? "feet" : "meters"})`,
+          color: "#fff",
+        },
+        grid: {
+          color: "rgba(255, 255, 255, 0.1)",
+        },
+        ticks: {
+          color: "#fff",
         },
       },
       y: {
         title: {
           display: true,
           text: "Ball Speed (mph)",
+          color: "#fff",
         },
+        grid: {
+          color: "rgba(255, 255, 255, 0.1)",
+        },
+        ticks: {
+          color: "#fff",
+        },
+        min: 0,
+        max: 20,
+        suggestedMax: 20,
       },
     },
   };
@@ -127,7 +155,7 @@ export function PuttingDiagram() {
           </button>
         ))}
       </div>
-      <div className="w-full max-w-3xl mx-auto">
+      <div className="w-full max-w-3xl mx-auto h-[400px]">
         <Line options={options} data={data} />
       </div>
     </div>
