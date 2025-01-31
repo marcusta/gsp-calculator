@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Info } from "lucide-react";
+import { Info, Plus, Minus } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -23,10 +23,93 @@ import {
   getMaterials,
   type MaterialInfo,
 } from "@/api";
-import { Switch } from "@/components/ui/switch";
-import { DistanceUnit, convertMetersToYards } from "@/types/units";
 import { Input } from "@/components/ui/input";
 import { useUnit } from "../contexts/UnitContext";
+
+interface QuickSelectButtonProps {
+  value: number;
+  onClick: (value: number) => void;
+  label: string;
+}
+
+function QuickSelectButton({ value, onClick, label }: QuickSelectButtonProps) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="px-2 py-1 h-8"
+      onClick={() => onClick(value)}
+    >
+      {label}
+    </Button>
+  );
+}
+
+interface NumberInputWithControlsProps {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  increment: number;
+  quickSelectValues?: Array<{ value: number; label: string }>;
+}
+
+function NumberInputWithControls({
+  id,
+  value,
+  onChange,
+  increment,
+  quickSelectValues,
+}: NumberInputWithControlsProps) {
+  const handleIncrement = (amount: number) => {
+    const currentValue = parseFloat(value) || 0;
+    onChange((currentValue + amount).toString());
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2 h-11">
+        <Input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="bg-background h-11"
+        />
+        <div className="flex gap-1 flex-shrink-0">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handleIncrement(-increment)}
+            className="h-11 aspect-square"
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handleIncrement(increment)}
+            className="h-11 aspect-square"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      {quickSelectValues && (
+        <div className="flex gap-1 flex-wrap">
+          {quickSelectValues.map(({ value, label }) => (
+            <QuickSelectButton
+              key={value}
+              value={value}
+              onClick={(v) => onChange(v.toString())}
+              label={label}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ClubShotAnalyzer() {
   const { unitSystem } = useUnit();
@@ -107,15 +190,16 @@ export function ClubShotAnalyzer() {
   };
 
   return (
-    <div className="p-6 min-h-[600px]">
-      <h2 className="text-2xl font-bold mb-6">Club Shot Calculator</h2>
-
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="club">Club</Label>
+    <div className="p-4 min-h-[600px] max-w-2xl mx-auto">
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+          {/* First row */}
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="club">Club</Label>
+            </div>
             <Select value={club} onValueChange={setClub}>
-              <SelectTrigger className="bg-background">
+              <SelectTrigger className="bg-background h-11">
                 <SelectValue placeholder="Select club" />
               </SelectTrigger>
               <SelectContent>
@@ -128,10 +212,12 @@ export function ClubShotAnalyzer() {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="material">Lie/Material</Label>
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="material">Lie/Material</Label>
+            </div>
             <Select value={material} onValueChange={setMaterial}>
-              <SelectTrigger className="bg-background">
+              <SelectTrigger className="bg-background h-11">
                 <SelectValue placeholder="Select material" />
               </SelectTrigger>
               <SelectContent>
@@ -143,203 +229,236 @@ export function ClubShotAnalyzer() {
               </SelectContent>
             </Select>
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="updown-lie">
-              Up/Down Slope (degrees)
+          {/* Second row */}
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="updown-lie">Up/Down Slope</Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
-                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Positive value = uphill lie
+                    Positive = uphill lie
                     <br />
-                    Negative value = downhill lie
+                    Negative = downhill lie
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </Label>
-            <Input
+            </div>
+            <NumberInputWithControls
               id="updown-lie"
-              type="number"
               value={upDownLie}
-              onChange={(e) => setUpDownLie(e.target.value)}
-              className="bg-background"
+              onChange={setUpDownLie}
+              increment={1}
+              quickSelectValues={[
+                { value: -5, label: "-5°" },
+                { value: 0, label: "0°" },
+                { value: 5, label: "+5°" },
+              ]}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="rightleft-lie">
-              Right/Left Slope (degrees)
+
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="rightleft-lie">Right/Left Slope</Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
-                    <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Positive value = right slope
+                    Positive = right slope
                     <br />
-                    Negative value = left slope
+                    Negative = left slope
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </Label>
-            <Input
+            </div>
+            <NumberInputWithControls
               id="rightleft-lie"
-              type="number"
               value={rightLeftLie}
-              onChange={(e) => setRightLeftLie(e.target.value)}
-              className="bg-background"
+              onChange={setRightLeftLie}
+              increment={1}
+              quickSelectValues={[
+                { value: -5, label: "-5°" },
+                { value: 0, label: "0°" },
+                { value: 5, label: "+5°" },
+              ]}
+            />
+          </div>
+
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="altitude">Altitude (feet)</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Height above sea level.
+                    <br />
+                    Shots travel ~1% further per 500ft of altitude
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <NumberInputWithControls
+              id="altitude"
+              value={altitude}
+              onChange={setAltitude}
+              increment={500}
+              quickSelectValues={[
+                { value: 0, label: "0" },
+                { value: 1000, label: "1000" },
+                { value: 2000, label: "2000" },
+              ]}
+            />
+          </div>
+
+          <div>
+            <div className="h-8 flex items-center gap-2">
+              <Label htmlFor="elevation">Elevation diff.</Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Height difference between ball and target.
+                    <br />
+                    Positive = uphill, Negative = downhill
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <NumberInputWithControls
+              id="elevation"
+              value={elevation}
+              onChange={setElevation}
+              increment={1}
+              quickSelectValues={[
+                { value: -10, label: "-10" },
+                { value: 0, label: "0" },
+                { value: 10, label: "+10" },
+              ]}
             />
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="altitude">
-            Altitude (feet)
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  Height above sea level.
-                  <br />
-                  Shots travel ~1% further per 500ft of altitude
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <Input
-            id="altitude"
-            type="number"
-            value={altitude}
-            onChange={(e) => setAltitude(e.target.value)}
-            className="bg-background"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="elevation">
-            Elevation Difference (
-            {unitSystem === "imperial" ? "yards" : "meters"})
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-4 w-4 text-muted-foreground ml-2 inline" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  Height difference between ball and target.
-                  <br />
-                  Positive = uphill
-                  <br />
-                  Negative = downhill
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </Label>
-          <Input
-            id="elevation"
-            type="number"
-            value={elevation}
-            onChange={(e) => setElevation(e.target.value)}
-            className="bg-background"
-          />
-        </div>
-
-        <Button onClick={handleCalculate} disabled={loading}>
-          {loading ? "Calculating..." : "Calculate"}
+        <Button
+          onClick={handleCalculate}
+          disabled={loading}
+          className="w-full h-12 text-lg"
+        >
+          {loading ? "Calculating..." : "Calculate Shot Parameters"}
         </Button>
 
-        {error && <div className="text-red-500">{error}</div>}
+        {error && (
+          <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>
+        )}
 
+        {/* Results section */}
         {results && (
-          <div className="mt-4 space-y-4">
-            <h3 className="font-semibold">Shot Parameters for {club}:</h3>
-
-            {results.map(
-              (result, index) =>
-                result && (
-                  <div key={index} className="border p-4 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold mb-2">
-                        {index === 0
-                          ? "Minimum"
-                          : index === 1
-                          ? "Quarter"
-                          : index === 2
-                          ? "Half"
-                          : index === 3
-                          ? "Three-Quarter"
-                          : "Maximum"}{" "}
-                        Power
-                      </h4>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Info className="h-4 w-4 text-muted-foreground -translate-y-1" />
-                          </TooltipTrigger>
-                          <TooltipContent className="space-y-2 bg-blue-800">
-                            <p className="font-semibold">Applied Modifiers:</p>
-                            <p>
-                              Speed:{" "}
-                              {(
-                                (1 - result.modifiers.speedPenalty) *
-                                100
-                              ).toFixed(1)}
-                              % reduction
-                            </p>
-                            <p>
-                              Spin:{" "}
-                              {(
-                                (result.modifiers.spinPenalty - 1) *
-                                100
-                              ).toFixed(1)}
-                              % increase
-                            </p>
-                            <p>
-                              Launch Angle:{" "}
-                              {(
-                                (result.modifiers.vlaPenalty - 1) *
-                                100
-                              ).toFixed(1)}
-                              % change
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <p>Ball Speed: {result.ballSpeed.toFixed(1)} mph</p>
-                    <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
-                    <p>Launch Angle: {result.vla.toFixed(1)}°</p>
-                    <div className="mt-2">
-                      <p>Raw Carry: {formatDistance(result.rawCarry)}</p>
-                      <p>
-                        With Penalties: {formatDistance(result.estimatedCarry)}
-                      </p>
-                      <p>With Environment: {formatDistance(result.envCarry)}</p>
-                      <p className="text-red-500">
-                        Carry Reduced by{" "}
-                        {(
-                          (1 - result.estimatedCarry / result.rawCarry) *
-                          100
-                        ).toFixed(1)}
-                        %
-                      </p>
-                      {result.offlineDeviation !== 0 && (
-                        <p className="text-yellow-500">
-                          Ball will travel{" "}
-                          {formatDistance(Math.abs(result.offlineDeviation))}{" "}
-                          {result.offlineDeviation > 0 ? "right" : "left"} of
-                          target
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg">
+              Shot Parameters for {club}:
+            </h3>
+            <div className="space-y-4">
+              {results.map(
+                (result, index) =>
+                  result && (
+                    <div
+                      key={index}
+                      className="border p-4 rounded-lg bg-background/50 space-y-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xl font-semibold">
+                          {index === 0
+                            ? "Minimum"
+                            : index === 1
+                            ? "Quarter"
+                            : index === 2
+                            ? "Half"
+                            : index === 3
+                            ? "Three-Quarter"
+                            : "Maximum"}{" "}
+                          Power
+                        </h4>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent className="space-y-2">
+                              <p className="font-semibold">
+                                Applied Modifiers:
+                              </p>
+                              <p>
+                                Speed:{" "}
+                                {(
+                                  (1 - result.modifiers.speedPenalty) *
+                                  100
+                                ).toFixed(1)}
+                                % reduction
+                              </p>
+                              <p>
+                                Spin:{" "}
+                                {(
+                                  (result.modifiers.spinPenalty - 1) *
+                                  100
+                                ).toFixed(1)}
+                                % increase
+                              </p>
+                              <p>
+                                Launch Angle:{" "}
+                                {(
+                                  (result.modifiers.vlaPenalty - 1) *
+                                  100
+                                ).toFixed(1)}
+                                % change
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <p>Ball Speed: {result.ballSpeed.toFixed(1)} mph</p>
+                        <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
+                        <p>Launch Angle: {result.vla.toFixed(1)}°</p>
+                      </div>
+                      <div className="space-y-1 mt-2">
+                        <p>Raw Carry: {formatDistance(result.rawCarry)}</p>
+                        <p>
+                          With Penalties:{" "}
+                          {formatDistance(result.estimatedCarry)}
                         </p>
-                      )}
+                        <p>
+                          With Environment: {formatDistance(result.envCarry)}
+                        </p>
+                        <p className="text-red-500">
+                          Carry Reduced by{" "}
+                          {(
+                            (1 - result.estimatedCarry / result.rawCarry) *
+                            100
+                          ).toFixed(1)}
+                          %
+                        </p>
+                        {result.offlineDeviation !== 0 && (
+                          <p className="text-yellow-500">
+                            Ball will travel{" "}
+                            {formatDistance(Math.abs(result.offlineDeviation))}{" "}
+                            {result.offlineDeviation > 0 ? "right" : "left"} of
+                            target
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )
-            )}
+                  )
+              )}
+            </div>
           </div>
         )}
       </div>
