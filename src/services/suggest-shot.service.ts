@@ -92,8 +92,15 @@ export async function suggestShot(
       strongerOrWeakerClubIndex = 1;
     }
     if (strongerOrWeakerClubIndex !== 0) {
+      const newClub = clubs[clubGuess.clubIndex + strongerOrWeakerClubIndex];
+      console.log(
+        "!!!! Trying different club",
+        newClub.name,
+        " strongerOrWeaker: ",
+        strongerOrWeakerClubIndex
+      );
       const newResult = await tryClub(
-        clubs[clubGuess.clubIndex + strongerOrWeakerClubIndex],
+        newClub,
         targetCarry,
         material,
         upDownLie,
@@ -106,6 +113,7 @@ export async function suggestShot(
         Math.abs(newResult.estimatedCarry - targetCarry) <
         Math.abs(bestResult.estimatedCarry - targetCarry) * 0.8 // Only use if significantly better
       ) {
+        console.log("!!!! Using new result");
         bestResult = newResult;
       }
     }

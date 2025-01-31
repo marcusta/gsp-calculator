@@ -33,29 +33,20 @@ export function guessClub(
     };
   };
 
-  // First find the best club based on carry ranges
-  let bestClubIndex = -1;
-  let bestScore = Infinity;
+  // Find the closest club based on carry ranges
+  let bestClubIndex = 0;
+  let bestDistance = Infinity;
 
   clubs.forEach((club, index) => {
     const { minCarry, maxCarry } = getModifiedCarryRange(club);
-    // Allow some flexibility in the ranges
-    const minAllowed = minCarry * 0.9;
-    const maxAllowed = maxCarry * 1.1;
+    const rangeCenter = (minCarry + maxCarry) / 2;
+    const distance = Math.abs(
+      environmentModifiedCarryForFindingClub - rangeCenter
+    );
 
-    if (
-      environmentModifiedCarryForFindingClub >= minAllowed &&
-      environmentModifiedCarryForFindingClub <= maxAllowed
-    ) {
-      const rangeCenter = (minCarry + maxCarry) / 2;
-      const score = Math.abs(
-        environmentModifiedCarryForFindingClub - rangeCenter
-      );
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestClubIndex = index;
-      }
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestClubIndex = index;
     }
   });
 
@@ -78,20 +69,31 @@ export async function tryClub(
   altitude: number,
   trajectoryService: TrajectoryService
 ): Promise<ShotSuggestion> {
-  const speedRange = club.speedMax - club.speedMin;
   const avgSpin = (club.spinMax + club.spinMin) / 2;
   const avgVLA = (club.vlaMax + club.vlaMin) / 2;
 
-  // Determine number of speed samples based on range size
+  const carryRatioToNormal =
+    targetCarry / ((club.carryMax + club.carryMin) / 2);
+
+  // Extend speed range based on how far outside normal carry range we are
+  const extendedSpeedMin = club.speedMin * Math.min(carryRatioToNormal, 1);
+  const extendedSpeedMax = club.speedMax * Math.max(carryRatioToNormal, 1);
+  const extendedSpeedRange = extendedSpeedMax - extendedSpeedMin;
+
+  // Determine number of speed samples and their values
   const SPEED_RANGE_THRESHOLD = 5; // m/s
   const speeds =
-    speedRange <= SPEED_RANGE_THRESHOLD
-      ? [club.speedMin, (club.speedMin + club.speedMax) / 2, club.speedMax]
+    extendedSpeedRange <= SPEED_RANGE_THRESHOLD
+      ? [
+          extendedSpeedMin,
+          (extendedSpeedMin + extendedSpeedMax) / 2,
+          extendedSpeedMax,
+        ]
       : [
-          club.speedMin,
-          club.speedMin + speedRange * 0.33,
-          club.speedMin + speedRange * 0.66,
-          club.speedMax,
+          extendedSpeedMin,
+          extendedSpeedMin + extendedSpeedRange * 0.33,
+          extendedSpeedMin + extendedSpeedRange * 0.66,
+          extendedSpeedMax,
         ];
 
   const PERFECT_MATCH_THRESHOLD = 2.5; // meters - stop searching if we find a match this close
