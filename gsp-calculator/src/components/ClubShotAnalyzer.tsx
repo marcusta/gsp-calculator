@@ -422,33 +422,6 @@ export function ClubShotAnalyzer() {
                                     of target
                                   </p>
                                 )}
-                                <p className="font-semibold mt-2">
-                                  Applied Modifiers:
-                                </p>
-                                <p>
-                                  Speed:{" "}
-                                  {(
-                                    (1 - result.modifiers.speedPenalty) *
-                                    100
-                                  ).toFixed(1)}
-                                  % reduction
-                                </p>
-                                <p>
-                                  Spin:{" "}
-                                  {(
-                                    (result.modifiers.spinPenalty - 1) *
-                                    100
-                                  ).toFixed(1)}
-                                  % increase
-                                </p>
-                                <p>
-                                  Launch Angle:{" "}
-                                  {(
-                                    (result.modifiers.vlaPenalty - 1) *
-                                    100
-                                  ).toFixed(1)}
-                                  % change
-                                </p>
                               </div>
                             </TooltipContent>
                           </Tooltip>
@@ -458,7 +431,8 @@ export function ClubShotAnalyzer() {
                         <p>Plays as: {formatDistance(result.envCarry)}</p>
                         <p>Raw Carry: {formatDistance(result.rawCarry)}</p>
                         <p>
-                          Lie penalty: {formatDistance(result.estimatedCarry)}
+                          Only lie penalty:{" "}
+                          {formatDistance(result.estimatedCarry)}
                         </p>
                       </div>
                     </div>

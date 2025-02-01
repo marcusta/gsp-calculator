@@ -399,36 +399,6 @@ export function BallPhysicsCalculator() {
                   </p>
                 )}
               </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <p className="font-medium">Speed Modifier:</p>
-                  <p>{result.speedPenalty.toFixed(3)}</p>
-                </div>
-                <div>
-                  <p className="font-medium">Spin Modifier:</p>
-                  <p>{result.spinPenalty.toFixed(3)}</p>
-                </div>
-                <div>
-                  <p className="font-medium">VLA Modifier:</p>
-                  <p>{result.vlaPenalty.toFixed(3)}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <p className="font-medium">Modified Speed:</p>
-                  <p>{result.speedModified.toFixed(2)} mph</p>
-                </div>
-                <div>
-                  <p className="font-medium">Modified Spin:</p>
-                  <p>{result.spinModified.toFixed(0)} rpm</p>
-                </div>
-                <div>
-                  <p className="font-medium">Modified VLA:</p>
-                  <p>{result.vlaModified.toFixed(1)}°</p>
-                </div>
-              </div>
             </div>
           </div>
         )}
