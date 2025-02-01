@@ -389,8 +389,8 @@ export function BallPhysicsCalculator() {
             <div className="border p-4 rounded-lg bg-background/50 space-y-4">
               <div className="space-y-1">
                 <p>Raw Carry: {formatDistance(result.carryRaw)}</p>
-                <p>With Penalties: {formatDistance(result.carryModified)}</p>
-                <p>With Environment: {formatDistance(result.envCarry)}</p>
+                <p>+lie penalty: {formatDistance(result.carryModified)}</p>
+                <p>+environment: {formatDistance(result.envCarry)}</p>
                 {result.offlineDeviation !== 0 && (
                   <p className="text-yellow-500">
                     Ball will travel{" "}

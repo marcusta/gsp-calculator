@@ -428,11 +428,10 @@ export function ClubShotAnalyzer() {
                         </TooltipProvider>
                       </div>
                       <div className="space-y-1 mt-2">
-                        <p>Plays as: {formatDistance(result.envCarry)}</p>
+                        <p>"Plays as": {formatDistance(result.envCarry)}</p>
                         <p>Raw Carry: {formatDistance(result.rawCarry)}</p>
                         <p>
-                          Only lie penalty:{" "}
-                          {formatDistance(result.estimatedCarry)}
+                          +lie penalty: {formatDistance(result.estimatedCarry)}
                         </p>
                       </div>
                     </div>

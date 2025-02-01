@@ -345,8 +345,8 @@ export function getRoughVLAPenaltyForSpeed(
  */
 export function getAltitudeModifier(altitude: number): number {
   // 1% increase per 500 feet
-  // const rawAltitudeScaling = 1 + (altitude / 500) * 0.0075;
-  const rawAltitudeScaling = 1 + (altitude / 500) * 0.01;
+  const rawAltitudeScaling = 1 + (altitude / 500) * 0.008;
+  // const rawAltitudeScaling = 1 + (altitude / 500) * 0.01;
   return rawAltitudeScaling;
 }
 

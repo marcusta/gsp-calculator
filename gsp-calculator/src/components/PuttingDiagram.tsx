@@ -138,10 +138,6 @@ export function PuttingDiagram() {
   return (
     <div className="p-6 min-h-[400px]">
       <div className="w-full max-w-3xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">
-          Putting Distance-Speed Diagram
-        </h2>
-
         <div className="flex gap-0.5 mb-4">
           {availableStimps.map((stimp) => (
             <button
