@@ -164,6 +164,14 @@ app.get("/gsp-calc/assets/*", async (c) => {
   return serveAsset(c);
 });
 
+app.get("/gsp-calc/frontend/golfball-small.png", async (c) => {
+  console.log("serving golfball-small.png from /gsp-calc/");
+  const filePath = "./public/frontend/golfball-small.png";
+  const file = await readFile(filePath);
+  c.header("Content-Type", "image/png");
+  return new Response(new Uint8Array(file));
+});
+
 app.get("/gsp-calc/golfball-small.png", async (c) => {
   console.log("serving golfball-small.png from /gsp-calc/");
   const filePath = "./public/frontend/golfball-small.png";
