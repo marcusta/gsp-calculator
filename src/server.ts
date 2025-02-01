@@ -202,6 +202,7 @@ app.get("/golfball-small.png", async (c) => {
 
 // Catch-all route to serve index.html
 app.all("*", async (c) => {
+  console.log("serving index.html from /, ", c.req.path);
   try {
     const html = await readFile("./public/frontend/index.html");
     c.header("Content-Type", "text/html");
