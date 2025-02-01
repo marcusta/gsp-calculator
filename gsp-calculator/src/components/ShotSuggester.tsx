@@ -369,9 +369,6 @@ export function ShotSuggester() {
                   key={index}
                   className="border p-4 rounded-lg bg-background/50 space-y-2"
                 >
-                  <p className="text-xl font-semibold">
-                    Club: {suggestion.club}
-                  </p>
                   <p className="text-lg">
                     Plays as:{" "}
                     {(unitSystem === "imperial"
