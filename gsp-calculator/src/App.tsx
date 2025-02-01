@@ -12,7 +12,7 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-white">
                   <img
-                    src="/golfball-small.png"
+                    src="./golfball-small.png"
                     alt="GSPro Helpbot"
                     className="w-6 h-6 inline-block mr-2"
                   />
