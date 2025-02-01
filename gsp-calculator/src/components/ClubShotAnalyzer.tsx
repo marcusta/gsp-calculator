@@ -394,67 +394,72 @@ export function ClubShotAnalyzer() {
                               <Info className="h-4 w-4 text-muted-foreground" />
                             </TooltipTrigger>
                             <TooltipContent className="space-y-2">
-                              <p className="font-semibold">
-                                Applied Modifiers:
-                              </p>
-                              <p>
-                                Speed:{" "}
-                                {(
-                                  (1 - result.modifiers.speedPenalty) *
-                                  100
-                                ).toFixed(1)}
-                                % reduction
-                              </p>
-                              <p>
-                                Spin:{" "}
-                                {(
-                                  (result.modifiers.spinPenalty - 1) *
-                                  100
-                                ).toFixed(1)}
-                                % increase
-                              </p>
-                              <p>
-                                Launch Angle:{" "}
-                                {(
-                                  (result.modifiers.vlaPenalty - 1) *
-                                  100
-                                ).toFixed(1)}
-                                % change
-                              </p>
+                              <div className="space-y-2">
+                                <p className="font-semibold">Shot Details:</p>
+                                <p>
+                                  Ball Speed: {result.ballSpeed.toFixed(1)} mph
+                                </p>
+                                <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
+                                <p>Launch Angle: {result.vla.toFixed(1)}°</p>
+                                <p className="text-red-500">
+                                  Carry Reduced by{" "}
+                                  {(
+                                    (1 -
+                                      result.estimatedCarry / result.rawCarry) *
+                                    100
+                                  ).toFixed(1)}
+                                  %
+                                </p>
+                                {result.offlineDeviation !== 0 && (
+                                  <p className="text-yellow-500">
+                                    Ball will travel{" "}
+                                    {formatDistance(
+                                      Math.abs(result.offlineDeviation)
+                                    )}{" "}
+                                    {result.offlineDeviation > 0
+                                      ? "right"
+                                      : "left"}{" "}
+                                    of target
+                                  </p>
+                                )}
+                                <p className="font-semibold mt-2">
+                                  Applied Modifiers:
+                                </p>
+                                <p>
+                                  Speed:{" "}
+                                  {(
+                                    (1 - result.modifiers.speedPenalty) *
+                                    100
+                                  ).toFixed(1)}
+                                  % reduction
+                                </p>
+                                <p>
+                                  Spin:{" "}
+                                  {(
+                                    (result.modifiers.spinPenalty - 1) *
+                                    100
+                                  ).toFixed(1)}
+                                  % increase
+                                </p>
+                                <p>
+                                  Launch Angle:{" "}
+                                  {(
+                                    (result.modifiers.vlaPenalty - 1) *
+                                    100
+                                  ).toFixed(1)}
+                                  % change
+                                </p>
+                              </div>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <p>Ball Speed: {result.ballSpeed.toFixed(1)} mph</p>
-                        <p>Spin Rate: {result.spin.toFixed(0)} rpm</p>
-                        <p>Launch Angle: {result.vla.toFixed(1)}°</p>
-                      </div>
                       <div className="space-y-1 mt-2">
+                        <p>Plays as: {formatDistance(result.envCarry)}</p>
                         <p>Raw Carry: {formatDistance(result.rawCarry)}</p>
                         <p>
-                          With Penalties:{" "}
-                          {formatDistance(result.estimatedCarry)}
+                          Lie penalty: {formatDistance(result.estimatedCarry)}
                         </p>
-                        <p>
-                          With Environment: {formatDistance(result.envCarry)}
-                        </p>
-                        <p className="text-red-500">
-                          Carry Reduced by{" "}
-                          {(
-                            (1 - result.estimatedCarry / result.rawCarry) *
-                            100
-                          ).toFixed(1)}
-                          %
-                        </p>
-                        {result.offlineDeviation !== 0 && (
-                          <p className="text-yellow-500">
-                            Ball will travel{" "}
-                            {formatDistance(Math.abs(result.offlineDeviation))}{" "}
-                            {result.offlineDeviation > 0 ? "right" : "left"} of
-                            target
-                          </p>
-                        )}
                       </div>
                     </div>
                   )

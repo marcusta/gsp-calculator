@@ -113,9 +113,9 @@ function NumberInputWithControls({
 
 export function BallPhysicsCalculator() {
   const { unitSystem } = useUnit();
-  const [speed, setSpeed] = useState<number>(0);
-  const [vla, setVLA] = useState<number>(0);
-  const [spin, setSpin] = useState<number>(0);
+  const [speed, setSpeed] = useState<number>(120);
+  const [vla, setVLA] = useState<number>(20);
+  const [spin, setSpin] = useState<number>(6000);
   const [material, setMaterial] = useState<string>("fairway");
   const [materials, setMaterials] = useState<MaterialInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -387,6 +387,19 @@ export function BallPhysicsCalculator() {
           <div className="space-y-4">
             <h3 className="font-semibold text-lg">Results:</h3>
             <div className="border p-4 rounded-lg bg-background/50 space-y-4">
+              <div className="space-y-1">
+                <p>Raw Carry: {formatDistance(result.carryRaw)}</p>
+                <p>With Penalties: {formatDistance(result.carryModified)}</p>
+                <p>With Environment: {formatDistance(result.envCarry)}</p>
+                {result.offlineDeviation !== 0 && (
+                  <p className="text-yellow-500">
+                    Ball will travel{" "}
+                    {formatDistance(Math.abs(result.offlineDeviation))}{" "}
+                    {result.offlineDeviation > 0 ? "right" : "left"} of target
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <p className="font-medium">Speed Modifier:</p>
@@ -415,19 +428,6 @@ export function BallPhysicsCalculator() {
                   <p className="font-medium">Modified VLA:</p>
                   <p>{result.vlaModified.toFixed(1)}°</p>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <p>Raw Carry: {formatDistance(result.carryRaw)}</p>
-                <p>With Penalties: {formatDistance(result.carryModified)}</p>
-                <p>With Environment: {formatDistance(result.envCarry)}</p>
-                {result.offlineDeviation !== 0 && (
-                  <p className="text-yellow-500">
-                    Ball will travel{" "}
-                    {formatDistance(Math.abs(result.offlineDeviation))}{" "}
-                    {result.offlineDeviation > 0 ? "right" : "left"} of target
-                  </p>
-                )}
               </div>
             </div>
           </div>

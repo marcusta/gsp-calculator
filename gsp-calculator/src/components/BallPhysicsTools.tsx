@@ -80,7 +80,11 @@ export function BallPhysicsTools() {
             <div className="w-full overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
               <TabsList className="w-max min-w-full flex-nowrap">
                 {tabs.map((tab) => (
-                  <TabsTrigger key={tab.value} value={tab.value}>
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="data-[state=active]:bg-slate-600 data-[state=active]:text-white"
+                  >
                     {tab.label}
                   </TabsTrigger>
                 ))}

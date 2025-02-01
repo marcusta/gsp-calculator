@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { getDistanceForSpeed, getSpeedForDistance } from "@/putting";
 import { Switch } from "@/components/ui/switch";
 import { useUnit } from "../contexts/UnitContext";
+import { Button } from "@/components/ui/button";
 
 export function PuttCalculator() {
   const { unitSystem } = useUnit();
@@ -42,48 +43,54 @@ export function PuttCalculator() {
   };
 
   return (
-    <div className="p-6 min-h-[400px]">
-      <h2 className="text-2xl font-bold mb-6">Putt Calculator</h2>
-
-      <div className="space-y-6 max-w-xl">
+    <div className="p-4 min-h-[600px] max-w-2xl mx-auto">
+      <div className="space-y-6">
         {/* Stimp Selection */}
-        <div className="space-y-2">
-          <Label>Stimp Speed</Label>
-          <div className="flex gap-2 mb-4">
+        <div>
+          <div className="h-8 flex items-center">
+            <Label>Stimp Speed</Label>
+          </div>
+          <div className="flex gap-2">
             {stimpValues.map((stimpValue) => (
-              <button
+              <Button
                 key={stimpValue}
+                variant={stimp === stimpValue ? "default" : "outline"}
+                size="sm"
                 onClick={() => setStimp(stimpValue)}
-                className={`px-4 py-2 rounded font-medium ${
-                  stimp === stimpValue
-                    ? "bg-blue-500 text-white"
-                    : "bg-white text-gray-900 border border-gray-300 hover:bg-gray-100"
-                }`}
+                className="h-11"
               >
                 Stimp {stimpValue}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="mode-toggle"
-            checked={mode === "distanceToSpeed"}
-            onCheckedChange={(checked) =>
-              setMode(checked ? "distanceToSpeed" : "speedToDistance")
-            }
-          />
-          <Label htmlFor="mode-toggle">
-            {mode === "speedToDistance"
-              ? "Calculate Distance from Speed"
-              : "Calculate Speed from Distance"}
-          </Label>
+        {/* Mode Selection */}
+        <div>
+          <div className="h-8 flex items-center gap-2">
+            <Label htmlFor="mode-toggle">Calculation Mode</Label>
+          </div>
+          <div className="flex items-center gap-2 h-11">
+            <Switch
+              id="mode-toggle"
+              checked={mode === "distanceToSpeed"}
+              onCheckedChange={(checked) =>
+                setMode(checked ? "distanceToSpeed" : "speedToDistance")
+              }
+            />
+            <Label htmlFor="mode-toggle" className="text-muted-foreground">
+              {mode === "speedToDistance"
+                ? "Calculate Distance from Speed"
+                : "Calculate Speed from Distance"}
+            </Label>
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="speed">Ball Speed (mph)</Label>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-6">
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="speed">Ball Speed (mph)</Label>
+            </div>
             <Input
               id="speed"
               type="number"
@@ -93,41 +100,41 @@ export function PuttCalculator() {
               value={speed}
               onChange={(e) => setSpeed(e.target.value)}
               disabled={mode === "distanceToSpeed"}
-              className="w-40"
+              className="bg-background h-11"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="distance">
-              Distance ({unitSystem === "imperial" ? "feet" : "meters"})
-            </Label>
+          <div>
+            <div className="h-8 flex items-center">
+              <Label htmlFor="distance">
+                Distance ({unitSystem === "imperial" ? "feet" : "meters"})
+              </Label>
+            </div>
             <Input
               id="distance"
               type="number"
               min="0"
-              max={unitSystem === "imperial" ? 65 : 20} // Adjusted max for feet
+              max={unitSystem === "imperial" ? 65 : 20}
               step="0.1"
               value={distance}
               onChange={(e) => setDistance(e.target.value)}
               disabled={mode === "speedToDistance"}
-              className="w-40"
+              className="bg-background h-11"
             />
           </div>
+        </div>
 
-          <div className="space-x-4">
-            <button
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-lg"
-              onClick={handleCalculate}
-            >
-              Calculate
-            </button>
-            <button
-              className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-lg"
-              onClick={handleClear}
-            >
-              Clear
-            </button>
-          </div>
+        <div className="flex gap-4">
+          <Button onClick={handleCalculate} className="flex-1 h-12 text-lg">
+            Calculate
+          </Button>
+          <Button
+            onClick={handleClear}
+            variant="outline"
+            className="flex-1 h-12 text-lg"
+          >
+            Clear
+          </Button>
         </div>
       </div>
     </div>
