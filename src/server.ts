@@ -114,6 +114,7 @@ app.get("/api/clubs", (c) => {
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 async function serveAsset(c: Context) {
+  console.log("serving asset", c.req.path);
   try {
     const path = c.req.path
       .replace("/assets/", "")
@@ -143,6 +144,10 @@ async function serveAsset(c: Context) {
       c.header("Content-Type", "image/jpeg");
     else if (ext === "svg") c.header("Content-Type", "image/svg+xml");
 
+    // Handle binary files (images) differently from text files
+    if (["png", "jpg", "jpeg"].includes(ext || "")) {
+      return new Response(new Uint8Array(file));
+    }
     return c.body(file.toString());
   } catch (error) {
     console.error("Asset not found:", error);
@@ -157,6 +162,22 @@ app.get("/assets/*", async (c) => {
 
 app.get("/gsp-calc/assets/*", async (c) => {
   return serveAsset(c);
+});
+
+app.get("/gsp-calc/golfball-small.png", async (c) => {
+  console.log("serving golfball-small.png from /gsp-calc/");
+  const filePath = "./public/frontend/golfball-small.png";
+  const file = await readFile(filePath);
+  c.header("Content-Type", "image/png");
+  return new Response(new Uint8Array(file));
+});
+
+app.get("/golfball-small.png", async (c) => {
+  console.log("serving golfball-small.png from /");
+  const filePath = "./public/frontend/golfball-small.png";
+  const file = await readFile(filePath);
+  c.header("Content-Type", "image/png");
+  return new Response(new Uint8Array(file));
 });
 
 // Catch-all route to serve index.html
