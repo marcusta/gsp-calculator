@@ -164,28 +164,24 @@ app.get("/gsp-calc/assets/*", async (c) => {
   return serveAsset(c);
 });
 
-app.get("/frontend/golfball-small.png", async (c) => {
-  console.log("serving golfball-small.png from /gsp-calc/");
+async function serveGolfball() {
   const filePath = "./public/frontend/golfball-small.png";
   const file = await readFile(filePath);
-  c.header("Content-Type", "image/png");
   return new Response(new Uint8Array(file), {
     headers: {
       "Content-Type": "image/png",
     },
   });
+}
+
+app.get("/frontend/golfball-small.png", async (c) => {
+  console.log("serving golfball-small.png from /gsp-calc/");
+  return serveGolfball();
 });
 
 app.get("/golfball-small.png", async (c) => {
   console.log("serving golfball-small.png from /");
-  const filePath = "./public/frontend/golfball-small.png";
-  const file = await readFile(filePath);
-  c.header("Content-Type", "image/png");
-  return new Response(new Uint8Array(file), {
-    headers: {
-      "Content-Type": "image/png",
-    },
-  });
+  return serveGolfball();
 });
 
 // Catch-all route to serve index.html
