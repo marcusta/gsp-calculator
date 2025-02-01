@@ -176,6 +176,18 @@ app.get("/frontend/golfball-small.png", async (c) => {
   });
 });
 
+app.get("/golfball-small.png", async (c) => {
+  console.log("serving golfball-small.png from /");
+  const filePath = "./public/frontend/golfball-small.png";
+  const file = await readFile(filePath);
+  c.header("Content-Type", "image/png");
+  return new Response(new Uint8Array(file), {
+    headers: {
+      "Content-Type": "image/png",
+    },
+  });
+});
+
 // Catch-all route to serve index.html
 app.all("*", async (c) => {
   console.log("serving index.html from /, ", c.req.path);
