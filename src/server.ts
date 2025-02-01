@@ -169,7 +169,11 @@ app.get("/gsp-calc/frontend/golfball-small.png", async (c) => {
   const filePath = "./public/frontend/golfball-small.png";
   const file = await readFile(filePath);
   c.header("Content-Type", "image/png");
-  return new Response(new Uint8Array(file));
+  return new Response(new Uint8Array(file), {
+    headers: {
+      "Content-Type": "image/png",
+    },
+  });
 });
 
 app.get("/gsp-calc/golfball-small.png", async (c) => {
@@ -177,7 +181,11 @@ app.get("/gsp-calc/golfball-small.png", async (c) => {
   const filePath = "./public/frontend/golfball-small.png";
   const file = await readFile(filePath);
   c.header("Content-Type", "image/png");
-  return new Response(new Uint8Array(file));
+  return new Response(new Uint8Array(file), {
+    headers: {
+      "Content-Type": "image/png",
+    },
+  });
 });
 
 app.get("/golfball-small.png", async (c) => {
@@ -185,7 +193,11 @@ app.get("/golfball-small.png", async (c) => {
   const filePath = "./public/frontend/golfball-small.png";
   const file = await readFile(filePath);
   c.header("Content-Type", "image/png");
-  return new Response(new Uint8Array(file));
+  return new Response(new Uint8Array(file), {
+    headers: {
+      "Content-Type": "image/png",
+    },
+  });
 });
 
 // Catch-all route to serve index.html
