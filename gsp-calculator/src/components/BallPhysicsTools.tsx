@@ -26,16 +26,20 @@ export function BallPhysicsTools() {
       {/* Mobile Menu */}
       <div className="sm:hidden">
         <div className="p-4 border-b border-white/10">
-          <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
-              className="text-white flex-1 flex justify-between items-center"
+              className="text-white"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
             >
-              <span>{tabs.find((tab) => tab.value === currentTab)?.label}</span>
               <Menu className="h-5 w-5" />
             </Button>
+
+            <span className="flex-1 text-center text-white">
+              {tabs.find((tab) => tab.value === currentTab)?.label}
+            </span>
+
             <UnitToggle />
           </div>
         </div>
@@ -76,21 +80,23 @@ export function BallPhysicsTools() {
       {/* Desktop Tabs */}
       <div className="hidden sm:block">
         <Tabs value={currentTab} onValueChange={setCurrentTab}>
-          <div className="flex justify-between items-center mb-4">
-            <div className="w-full overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
-              <TabsList className="w-max min-w-full flex-nowrap">
+          <div className="flex items-center mb-4 bg-slate-800 rounded-md">
+            <div className="flex-1">
+              <TabsList className="w-full bg-transparent">
                 {tabs.map((tab) => (
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="data-[state=active]:bg-slate-600 data-[state=active]:text-white"
+                    className="data-[state=active]:bg-slate-600 data-[state=active]:text-white text-slate-300"
                   >
                     {tab.label}
                   </TabsTrigger>
                 ))}
               </TabsList>
             </div>
-            <UnitToggle className="ml-4" />
+            <div className="border-l border-slate-700 px-2">
+              <UnitToggle />
+            </div>
           </div>
 
           <TabsContent value="calculator">
