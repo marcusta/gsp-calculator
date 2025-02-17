@@ -1,8 +1,4 @@
-import {
-  SpeedDistanceData,
-  getAvailableStimps,
-  getDistanceForSpeed,
-} from "@/putting";
+import { SpeedDistanceData, getDistanceForSpeed } from "@/putting";
 import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -17,6 +13,7 @@ import {
 import { useState } from "react";
 import { useUnit } from "../contexts/UnitContext";
 import type { ChartData, ChartOptions } from "chart.js";
+import { StimpSelector } from "./StimpSelector";
 
 // Register ChartJS components
 ChartJS.register(
@@ -53,7 +50,6 @@ function generateSpeedBasedData(
 export function PuttingDiagram() {
   const { unitSystem } = useUnit();
   const [selectedStimp, setSelectedStimp] = useState(11);
-  const availableStimps = getAvailableStimps();
 
   // Generate data points from 2mph to 16mph in 0.5mph increments
   const smoothData = generateSpeedBasedData(
@@ -138,20 +134,12 @@ export function PuttingDiagram() {
   return (
     <div className="p-6 min-h-[400px]">
       <div className="w-full max-w-3xl mx-auto">
-        <div className="flex gap-0.5 mb-4">
-          {availableStimps.map((stimp) => (
-            <button
-              key={stimp}
-              onClick={() => setSelectedStimp(stimp)}
-              className={`px-2 py-1 rounded text-xs font-medium ${
-                selectedStimp === stimp
-                  ? "bg-blue-500 text-white"
-                  : "bg-white text-gray-900 border border-gray-300 hover:bg-gray-100"
-              }`}
-            >
-              Stimp {stimp}
-            </button>
-          ))}
+        <div className="mb-4">
+          <StimpSelector
+            selectedStimp={selectedStimp}
+            onStimpChange={setSelectedStimp}
+            showLabel={false}
+          />
         </div>
 
         <div className="h-[400px]">

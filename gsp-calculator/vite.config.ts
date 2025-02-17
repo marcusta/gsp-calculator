@@ -9,7 +9,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  base: process.env.NODE_ENV === "production" ? "/gsp-calc/" : "/",
+  base: process.env.NODE_ENV === "production" ? "/mycal/" : "/",
   server: {
     proxy: {
       // Match all API endpoints with a single rule

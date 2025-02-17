@@ -5,6 +5,7 @@ import { getDistanceForSpeed, getSpeedForDistance } from "@/putting";
 import { Switch } from "@/components/ui/switch";
 import { useUnit } from "../contexts/UnitContext";
 import { Button } from "@/components/ui/button";
+import { StimpSelector } from "./StimpSelector";
 
 export function PuttCalculator() {
   const { unitSystem } = useUnit();
@@ -14,9 +15,6 @@ export function PuttCalculator() {
   const [speed, setSpeed] = useState<string>("");
   const [distance, setDistance] = useState<string>("");
   const [stimp, setStimp] = useState<number>(11);
-
-  // Add available stimp values
-  const stimpValues = [10, 11, 12, 13];
 
   const handleCalculate = () => {
     if (mode === "speedToDistance" && speed) {
@@ -45,25 +43,12 @@ export function PuttCalculator() {
   return (
     <div className="p-4 min-h-[600px] max-w-2xl mx-auto">
       <div className="space-y-6">
-        {/* Stimp Selection */}
-        <div>
-          <div className="h-8 flex items-center">
-            <Label>Stimp Speed</Label>
-          </div>
-          <div className="flex gap-2">
-            {stimpValues.map((stimpValue) => (
-              <Button
-                key={stimpValue}
-                variant={stimp === stimpValue ? "default" : "outline"}
-                size="sm"
-                onClick={() => setStimp(stimpValue)}
-                className="h-11"
-              >
-                Stimp {stimpValue}
-              </Button>
-            ))}
-          </div>
-        </div>
+        {/* Replace Stimp Selection with new component */}
+        <StimpSelector
+          selectedStimp={stimp}
+          onStimpChange={setStimp}
+          showLabel={false}
+          />
 
         {/* Mode Selection */}
         <div>
