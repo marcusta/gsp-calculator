@@ -26,8 +26,14 @@ export function calculateOfflineDeviation(
   lieDegrees: number,
   distanceMeters: number
 ) {
-  // Get the HLA modification based on VLA
-  const hlaModification = calculateHLAModification(vla);
+  const baseDeviation = distanceMeters * Math.sin((lieDegrees * Math.PI) / 180);
+  const hlaModification = Math.max(
+    0.4,
+    Math.min(0.95, 0.95 - (vla - 10) * (0.55 / 35))
+  );
+
+  return baseDeviation * hlaModification;
+  /*const hlaModification = calculateHLAModification(vla);
 
   // Calculate the effective horizontal angle
   const effectiveAngle = hlaModification * lieDegrees;
@@ -39,5 +45,5 @@ export function calculateOfflineDeviation(
   const offlineDeviation = distanceMeters * Math.tan(angleInRadians);
 
   // Round to 1 decimal place
-  return Math.round(offlineDeviation * 10) / 10;
+  return Math.round(offlineDeviation * 10) / 10;*/
 }
